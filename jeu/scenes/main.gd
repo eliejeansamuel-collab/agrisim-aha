@@ -6,13 +6,16 @@ extends Node3D
 enum Etape { INTRO, FONCIER, ETUDES, BESOINS, CONCEPTION, CAMPAGNE, BILAN }
 
 # Réalité du terrain, inconnue du joueur tant qu'il n'a pas fait les études
-const VRAI := {
-	"sol": "argileux", "pente": 0.004, "pente_canal": 0.001,
-	"q_riviere": [0.006, 0.004, 0.006, 0.03, 0.10, 0.30, 0.20, 0.06, 0.08, 0.12, 0.08, 0.02],
-	"crue_2ans": 0.5, "crue_10ans": 0.9, "crue_50ans": 1.2,
-}
+var VRAI := {}
 # Ce que le joueur « croit » sans étude (estimation à l'œil)
-const CROYANCE := {"sol": "limoneux", "pente_canal": 0.0003, "crue": 0.5}
+var CROYANCE := {}
+# --- Configuration du site (écran « Nouveau projet ») ---
+var site := {"region": "san_pedro", "topo": "bas_fond", "texture": "argileux", "structure": "polyedrique",
+	"profondeur": 50, "pluie_pct": 100.0, "et0_pct": 100.0, "secheresse_j": 15.0, "crues_pct": 100.0}
+var climats: Dictionary
+var topos: Dictionary
+var topo: Dictionary
+var decor: Node3D
 const KS_TERRE := 30.0
 const FRUIT := 1.0
 const REVANCHE := 0.15
@@ -22,9 +25,10 @@ const L_DIGUETTES := 2450.0
 const L_DIGUE := 250.0
 const L_DRAIN := 300.0
 const SEMIS := [
-	{"nom": "1er mai — grande saison des pluies", "jour": 121},
-	{"nom": "1er septembre — petite saison des pluies", "jour": 244},
-	{"nom": "1er décembre — contre-saison sèche", "jour": 335},
+	{"nom": "1er mai", "jour": 121},
+	{"nom": "1er juillet", "jour": 182},
+	{"nom": "1er septembre", "jour": 244},
+	{"nom": "1er décembre", "jour": 335},
 ]
 const DEMARCHES := [
 	{"id": "coutumier", "nom": "Rencontrer le chef de terre et identifier les détenteurs de droits coutumiers", "cout": "enquete_coutumiere", "jours": 3, "risque": 0.25},
@@ -99,7 +103,11 @@ var popup_boutons: HBoxContainer
 
 
 func _ready() -> void:
-	climat = _json("res://donnees/climat.json").san_pedro
+	climats = _json("res://donnees/climat.json")
+	topos = _json("res://donnees/topographies.json")
+	topos.erase("_note")
+	climat = climats.san_pedro
+	topo = topos.bas_fond
 	riz = _json("res://donnees/cultures.json").riz_irrigue
 	sols = _json("res://donnees/sols.json")
 	couts = _json("res://donnees/couts.json")
@@ -109,6 +117,11 @@ func _ready() -> void:
 		rng.seed = int(graine)
 	else:
 		rng.randomize()
+	var cfg := OS.get_environment("AGRISIM_SITE").split(",", false)
+	if cfg.size() >= 5:
+		site.region = cfg[0]; site.topo = cfg[1]; site.texture = cfg[2]; site.structure = cfg[3]; site.profondeur = int(cfg[4])
+	if cfg.size() >= 9:
+		site.pluie_pct = float(cfg[5]); site.et0_pct = float(cfg[6]); site.secheresse_j = float(cfg[7]); site.crues_pct = float(cfg[8])
 	_creer_monde()
 	_creer_interface()
 	_nouvelle_partie()
@@ -156,9 +169,8 @@ func _creer_monde() -> void:
 	terrain_mi = MeshInstance3D.new()
 	terrain_mi.material_override = terrain_mat
 	add_child(terrain_mi)
-	_reconstruire_terrain()
-	_creer_riviere()
-	_creer_decor()
+	decor = Node3D.new()
+	add_child(decor)
 	_creer_avatar()
 
 	bornes = Node3D.new()
@@ -217,7 +229,7 @@ func _creer_riviere() -> void:
 	var mi := MeshInstance3D.new()
 	mi.mesh = st.commit()
 	mi.material_override = _mat(Color(0.20, 0.45, 0.62, 0.9), true)
-	add_child(mi)
+	decor.add_child(mi)
 
 
 func _creer_decor() -> void:
@@ -234,13 +246,22 @@ func _creer_decor() -> void:
 	var positions: Array = []
 	var r := RandomNumberGenerator.new()
 	r.seed = 11
-	while positions.size() < 700:
+	var essais := 0
+	var n_versant: int = 700 if Terrain.H_VERSANT > 1.0 else 120
+	while positions.size() < n_versant and essais < 20000:
+		essais += 1
 		var x := r.randf_range(-395, 395)
 		var z := r.randf_range(-395, 395)
-		if abs(x - Terrain.x_riviere(z)) > Terrain.DEMI_FOND + 15.0:
+		var loin: bool = abs(x - Terrain.x_riviere(z)) > Terrain.DEMI_FOND + 15.0
+		if Terrain.H_VERSANT <= 1.0:
+			loin = x > 260.0 or x < -60.0
+		if loin and abs(x - Terrain.x_riviere(z)) > 20.0:
 			positions.append(Vector3(x, Terrain.hauteur(x, z) + 6.0, z))
 	# Quelques palmiers et arbres isolés dans le bas-fond, hors parcelle
-	while positions.size() < 740:
+	var cible_n: int = positions.size() + 40
+	essais = 0
+	while positions.size() < cible_n and essais < 5000:
+		essais += 1
 		var x2 := r.randf_range(-250, 30)
 		var z2 := r.randf_range(-395, 395)
 		if abs(x2 - Terrain.x_riviere(z2)) > 20.0:
@@ -252,24 +273,24 @@ func _creer_decor() -> void:
 	var mmi := MultiMeshInstance3D.new()
 	mmi.multimesh = mm
 	mmi.material_override = _mat(Color(0.10, 0.33, 0.12))
-	add_child(mmi)
+	decor.add_child(mmi)
 	# Village sur le versant ouest
 	for i in 7:
 		var x := -330.0 + (i % 3) * 22.0
 		var z := -60.0 + (i / 3) * 28.0 + (i % 2) * 6.0
 		var y := Terrain.hauteur(x, z)
-		_boite(self, Vector3(9, 5, 7), Vector3(x, y + 2.5, z), Color(0.80, 0.62, 0.42))
+		_boite(decor, Vector3(9, 5, 7), Vector3(x, y + 2.5, z), Color(0.80, 0.62, 0.42))
 		var toit := MeshInstance3D.new()
 		var pr := PrismMesh.new()
 		pr.size = Vector3(11, 3.5, 9)
 		toit.mesh = pr
 		toit.material_override = _mat(Color(0.55, 0.25, 0.15))
 		toit.position = Vector3(x, y + 6.7, z)
-		add_child(toit)
+		decor.add_child(toit)
 	# Contour de la parcelle candidate (piquets jaunes)
 	var pr2 := Terrain.PARCELLE
 	for coin in [pr2.position, Vector2(pr2.end.x, pr2.position.y), pr2.end, Vector2(pr2.position.x, pr2.end.y)]:
-		_boite(self, Vector3(1.2, 6, 1.2), Vector3(coin.x, Terrain.hauteur(coin.x, coin.y) + 3.0, coin.y), Color(0.95, 0.80, 0.10))
+		_boite(decor, Vector3(1.2, 6, 1.2), Vector3(coin.x, Terrain.hauteur(coin.x, coin.y) + 3.0, coin.y), Color(0.95, 0.80, 0.10))
 
 
 func _creer_avatar() -> void:
@@ -678,8 +699,6 @@ func _nouvelle_partie() -> void:
 	campagne = null
 	avec_drain = false
 	digue_h = 0.0
-	Terrain.casiers_niveles = false
-	_reconstruire_terrain()
 	terrain_mat.set_shader_parameter("contours", 0.0)
 	for c in amenagement.get_children():
 		c.queue_free()
@@ -688,6 +707,7 @@ func _nouvelle_partie() -> void:
 	eau_mm = null
 	riz_mm = null
 	nappe_crue.visible = false
+	_generer_site()
 	_aller(Etape.INTRO)
 
 
@@ -704,10 +724,83 @@ func _aller(e: int) -> void:
 		Etape.BILAN: _ecran_bilan()
 
 
+## Construit la réalité du terrain à partir de la configuration choisie
+func _generer_site() -> void:
+	climat = climats[site.region]
+	topo = topos[site.topo]
+	var tex: Dictionary = sols.textures[site.texture]
+	var stru: Dictionary = sols.structures[site.structure]
+	var sol := {"nom": tex.nom, "structure_nom": stru.nom, "cc_pct": tex.cc_pct, "pfp_pct": tex.pfp_pct,
+		"percolation_mm_j": tex.percolation_mm_j * stru.percolation_x, "fertilite": stru.fertilite,
+		"profondeur_cm": site.profondeur}
+	# Débit prélevable du marigot : dépend de la pluie du mois et du mois précédent, et de la taille du bassin
+	var q: Array = []
+	for m in 12:
+		var lag: float = (0.6 * climat.pluie_mm[m] + 0.4 * climat.pluie_mm[(m + 11) % 12]) * site.pluie_pct / 100.0
+		q.append(0.0254 * pow(lag / 100.0, 2) * topo.bassin)
+	var kc: float = float(topo.crue_facteur) * site.crues_pct / 100.0
+	VRAI = {"sol": sol, "pente": topo.pente_long, "pente_canal": topo.pente_canal, "q_riviere": q,
+		"crue_2ans": 0.5 * kc, "crue_10ans": 0.9 * kc, "crue_50ans": 1.2 * kc}
+	var lim: Dictionary = sols.textures.limoneux
+	CROYANCE = {"sol": {"nom": lim.nom, "percolation_mm_j": lim.percolation_mm_j}, "pente_canal": float(topo.pente_canal) * 0.3, "crue": 0.5}
+	Terrain.configurer(topo)
+	_reconstruire_terrain()
+	for c in decor.get_children():
+		c.queue_free()
+	_creer_riviere()
+	_creer_decor()
+	avatar.position = Vector3(60, Terrain.hauteur(60, -150), -150)
+	cam_cible = Vector3(140, Terrain.hauteur(140, 0), 0)
+
+
+func _suivant(liste: Array, valeur) -> Variant:
+	return liste[(liste.find(valeur) + 1) % liste.size()]
+
+
+## Indice de difficulté du site (0 à 100), pour information
+func _difficulte() -> int:
+	var d := 0.0
+	d += clamp((VRAI.sol.percolation_mm_j - 2.0) * 2.0, 0.0, 30.0)
+	d += clamp(_volume_planage() / 400.0, 0.0, 20.0)
+	d += clamp(15.0 * (100.0 / max(site.pluie_pct, 10.0) - 0.8), 0.0, 15.0)
+	d += clamp(site.secheresse_j / 3.0, 0.0, 12.0)
+	d += clamp(VRAI.crue_10ans * 10.0, 0.0, 15.0)
+	d += 8.0 if float(climat.pluie_mm.min()) < 10.0 else 0.0
+	return int(clamp(d, 0.0, 100.0))
+
+
 func _ecran_intro() -> void:
 	_vider()
-	titre.text = "Le bas-fond de Gabiadji"
-	_texte("Tu viens d'obtenir ta licence AHA à l'Université de San-Pédro. Une coopérative te confie [b]%s[/b] pour aménager un bas-fond rizicole de [b]5 ha[/b] (les piquets jaunes), le long d'un marigot.\n\nTon objectif : réussir une campagne de riz irrigué. Chaque décision compte : le foncier, les études, les calculs, les ouvrages.\n\n[i]Explore le terrain : glisse pour tourner, pince pour zoomer, touche le sol pour t'y rendre. Lieu et personnages fictifs ; relief calibré, à remplacer par les données réelles.[/i]" % _fcfa(couts.capital_initial))
+	titre.text = "Nouveau projet"
+	_texte("Tu es jeune diplômé AHA de l'Université de San-Pédro. Une coopérative te confie [b]%s[/b] pour aménager [b]5 ha[/b] de riz irrigué (piquets jaunes). Choisis le site : chaque combinaison donne un problème d'ingénieur différent." % _fcfa(couts.capital_initial))
+	var total_pluie := 0.0
+	for v in climat.pluie_mm:
+		total_pluie += v
+	_bouton("Région : %s\n%s · %.0f mm/an" % [climat.nom, climat.zone, total_pluie * site.pluie_pct / 100.0], func():
+		site.region = _suivant(climats.keys(), site.region); _generer_site(); _ecran_intro())
+	_bouton("Relief : %s\n%s" % [topo.nom, topo.description], func():
+		site.topo = _suivant(topos.keys(), site.topo); _generer_site(); _ecran_intro())
+	_bouton("Texture du sol : %s" % sols.textures[site.texture].nom, func():
+		site.texture = _suivant(sols.textures.keys(), site.texture); _generer_site(); _ecran_intro())
+	_bouton("Structure du sol : %s" % sols.structures[site.structure].nom, func():
+		site.structure = _suivant(sols.structures.keys(), site.structure); _generer_site(); _ecran_intro())
+	_bouton("Profondeur utile du sol : %d cm" % site.profondeur, func():
+		site.profondeur = int(_suivant([30, 50, 80], site.profondeur)); _generer_site(); _ecran_intro())
+	_texte("[b]Climat de l'année[/b]")
+	_curseur("Pluie : %.0f %% de la normale" % site.pluie_pct, 50, 150, 5, site.pluie_pct, func(x): site.pluie_pct = x; _generer_site(); _ecran_intro())
+	_curseur("Évapotranspiration (ET0) : %.0f %% de la normale" % site.et0_pct, 80, 130, 5, site.et0_pct, func(x): site.et0_pct = x; _ecran_intro())
+	_curseur("Poche de sécheresse en pleine campagne : %.0f jours" % site.secheresse_j, 0, 40, 5, site.secheresse_j, func(x): site.secheresse_j = x; _ecran_intro())
+	_curseur("Hauteur des crues : %.0f %% de la normale" % site.crues_pct, 0, 200, 10, site.crues_pct, func(x): site.crues_pct = x; _generer_site(); _ecran_intro())
+	_texte("[b]Difficulté du site : %d / 100[/b]\n[i]Lieux et personnages fictifs. Relief et climats calibrés, valeurs indicatives à remplacer par les données réelles.[/i]" % _difficulte())
+	_bouton("Tirer un site au hasard", func():
+		site.region = climats.keys()[rng.randi() % climats.size()]
+		site.topo = topos.keys()[rng.randi() % topos.size()]
+		site.texture = sols.textures.keys()[rng.randi() % 3]
+		site.structure = sols.structures.keys()[rng.randi() % 3]
+		site.profondeur = [30, 50, 80][rng.randi() % 3]
+		site.pluie_pct = float(rng.randi_range(12, 26) * 5)
+		site.secheresse_j = float(rng.randi_range(0, 6) * 5)
+		_generer_site(); _ecran_intro())
 	_bouton("Commencer par le foncier", func(): _aller(Etape.FONCIER))
 
 
@@ -770,18 +863,22 @@ func _ecran_etudes() -> void:
 func _resultat_etude(id: String) -> String:
 	match id:
 		"topo":
-			return "Pente du bas-fond : [b]%.1f ‰[/b]. Pente disponible le long du tracé du canal : [b]%.1f ‰[/b]. Courbes de niveau (équidistance 0,5 m) affichées. Touche le sol pour lire une altitude précise." % [VRAI.pente * 1000.0, VRAI.pente_canal * 1000.0]
+			return "Pente du terrain : [b]%.1f ‰[/b] en long, [b]%.1f ‰[/b] en travers. Pente disponible le long du tracé du canal : [b]%.1f ‰[/b]. Planage des casiers : environ [b]%.0f m³[/b]. Courbes de niveau affichées ; touche le sol pour lire une altitude précise." % [VRAI.pente * 1000.0, topo.pente_trans * 1000.0, VRAI.pente_canal * 1000.0, _volume_planage()]
 		"sol":
-			var s: Dictionary = sols[VRAI.sol]
-			return "Sol [b]%s[/b] : CC %d %%, PFP %d %% (en volume), percolation sous lame d'eau [b]%.0f mm/j[/b]. RU sur 50 cm = %.0f mm. Très favorable au riz." % [s.nom, s.cc_pct, s.pfp_pct, s.percolation_mm_j, Eau.reserve_utile(s.cc_pct, s.pfp_pct, 500)]
+			var s: Dictionary = VRAI.sol
+			return "Sol [b]%s[/b], structure %s, profondeur utile %d cm. CC %d %%, PFP %d %% (en volume), percolation sous lame d'eau [b]%.0f mm/j[/b]. RU = %.0f mm. %s" % [s.nom, s.structure_nom, s.profondeur_cm, s.cc_pct, s.pfp_pct, s.percolation_mm_j, Eau.reserve_utile(s.cc_pct, s.pfp_pct, s.profondeur_cm * 10.0), "Très favorable au riz." if s.percolation_mm_j <= 3.0 else ("Acceptable pour le riz." if s.percolation_mm_j <= 8.0 else "Sol très filtrant : le riz en casiers consommera énormément d'eau.")]
 		"hydro":
-			return "Débit prélevable : de [b]4 L/s[/b] (février) à 300 L/s (juin). Crue au droit de la parcelle : [b]%.1f m[/b] (période de retour 2 ans), [b]%.1f m[/b] (10 ans), %.1f m (50 ans)." % [VRAI.crue_2ans, VRAI.crue_10ans, VRAI.crue_50ans]
+			var qmin: float = VRAI.q_riviere.min()
+			var qmax: float = VRAI.q_riviere.max()
+			var mois := ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"]
+			var crue_t := "Pas de crue à craindre sur ce site." if VRAI.crue_10ans <= 0.0 else "Crue au droit de la parcelle : [b]%.1f m[/b] (période de retour 2 ans), [b]%.1f m[/b] (10 ans), %.1f m (50 ans), durée %d jours." % [VRAI.crue_2ans, VRAI.crue_10ans, VRAI.crue_50ans, topo.crue_duree]
+			return "Débit prélevable : de [b]%.1f L/s[/b] (%s) à %.0f L/s (%s). %s" % [qmin * 1000.0, mois[VRAI.q_riviere.find(qmin)], qmax * 1000.0, mois[VRAI.q_riviere.find(qmax)], crue_t]
 	return ""
 
 
 # --- Valeurs « connues » du joueur : mesurées si l'étude est faite, sinon estimées ---
 func _sol_connu() -> Dictionary:
-	return sols[VRAI.sol] if fait.has("sol") else sols[CROYANCE.sol]
+	return VRAI.sol if fait.has("sol") else CROYANCE.sol
 
 func _pente_connue() -> float:
 	return VRAI.pente_canal if fait.has("topo") else CROYANCE.pente_canal
@@ -856,7 +953,8 @@ func _cout_travaux() -> Dictionary:
 	var v_digue: float = Hydraulique.volume_trapeze(1.0, digue_h, 2.0, L_DIGUE)
 	var d := {"Canal d'amenée (%.0f m³)" % v_canal: v_canal * t.terrassement_m3,
 		"Ouvrage de prise": float(t.ouvrage_prise),
-		"Diguettes et planage des casiers (%.0f m³)" % v_diguettes: v_diguettes * t.terrassement_m3 + 300000.0}
+		"Diguettes (%.0f m³)" % v_diguettes: v_diguettes * t.terrassement_m3,
+		"Planage des casiers (%.0f m³)" % _volume_planage(): _volume_planage() * t.planage_m3}
 	if digue_h > 0.05:
 		d["Digue de protection (%.0f m³)" % v_digue] = v_digue * t.terrassement_m3
 	if avec_drain:
@@ -878,10 +976,10 @@ func _ecran_conception() -> void:
 		etat = "[color=#ffb347]très surdimensionné (argent gaspillé)[/color]"
 	var src_pente := "mesurée" if fait.has("topo") else "[color=#ffb347]estimée à l'œil[/color]"
 	_texte("[b]Canal d'amenée en terre[/b] (trapèze, fruit 1/1, Ks = 30)\nPente %s : %.1f ‰ · revanche %.0f cm\nHauteur d'eau = %.2f m → capacité [b]%.1f L/s[/b] pour un débit de projet de %.1f L/s : %s\nVitesse : %.2f m/s%s" % [src_pente, pente * 1000.0, REVANCHE * 100.0, h_eau, q * 1000.0, q_projet * 1000.0, etat, v, "  [color=#ffb347](> 0,8 m/s : risque d'érosion en terre)[/color]" if v > 0.8 else ""])
-	_curseur("Largeur au plafond : %.2f m" % canal_b, 0.2, 0.8, 0.05, canal_b, func(x): canal_b = x; _ecran_conception())
-	_curseur("Profondeur totale du canal : %.2f m" % canal_h, 0.2, 0.6, 0.05, canal_h, func(x): canal_h = x; _ecran_conception())
+	_curseur("Largeur au plafond : %.2f m" % canal_b, 0.2, 2.0, 0.05, canal_b, func(x): canal_b = x; _ecran_conception())
+	_curseur("Profondeur totale du canal : %.2f m" % canal_h, 0.2, 1.0, 0.05, canal_h, func(x): canal_h = x; _ecran_conception())
 	_curseur("Hauteur des diguettes : %.0f cm" % (diguette_h * 100.0), 0.10, 0.35, 0.05, diguette_h, func(x): diguette_h = x; _ecran_conception())
-	var crue_txt := "Crue de référence : %.1f m (2 ans), %.1f m (10 ans)." % [VRAI.crue_2ans, VRAI.crue_10ans] if fait.has("hydro") else "[color=#ffb347]Pas d'étude hydrologique : les anciens parlent d'environ %.1f m d'eau certaines années.[/color]" % CROYANCE.crue
+	var crue_txt := ("Pas de crue à craindre sur ce site." if VRAI.crue_10ans <= 0.0 else "Crue de référence : %.1f m (2 ans), %.1f m (10 ans)." % [VRAI.crue_2ans, VRAI.crue_10ans]) if fait.has("hydro") else "[color=#ffb347]Pas d'étude hydrologique : les anciens parlent d'environ %.1f m d'eau certaines années.[/color]" % CROYANCE.crue
 	_texte(crue_txt)
 	_curseur("Digue de protection côté marigot : %.1f m" % digue_h, 0.0, 1.5, 0.1, digue_h, func(x): digue_h = x; _ecran_conception())
 	_bouton(("☑ " if avec_drain else "☐ ") + "Drain collecteur à l'aval (réseau de colature)", func():
@@ -909,6 +1007,11 @@ func _ecran_conception() -> void:
 		_aller(Etape.CAMPAGNE))
 
 
+## Volume de terre à déplacer pour mettre à plat 20 casiers de 50 m x 50 m (ordre de grandeur)
+func _volume_planage() -> float:
+	return 20.0 * 2500.0 * 50.0 * (float(topo.pente_long) + float(topo.pente_trans)) / 12.0
+
+
 func _charges_campagne_ha() -> float:
 	var s := 0.0
 	for k in couts.campagne_par_ha:
@@ -928,24 +1031,30 @@ func _demarrer_campagne() -> void:
 	var meteo := Meteo.new(climat, rng.randi())
 	var jour_semis: int = SEMIS[semis_idx].jour
 	meteo.secheresse_debut = ((jour_semis + 52 - 1) % 365) + 1
-	meteo.secheresse_duree = 15
 	campagne = Campagne.new(riz, meteo)
-	var sol: Dictionary = sols[VRAI.sol]
+	var sol: Dictionary = VRAI.sol
+	meteo.facteur_pluie = site.pluie_pct / 100.0
+	meteo.facteur_et0 = site.et0_pct / 100.0
+	meteo.secheresse_duree = int(site.secheresse_j)
 	campagne.surface_ha = 5.0
-	campagne.ru_mm = Eau.reserve_utile(sol.cc_pct, sol.pfp_pct, 500)
+	campagne.facteur_fertilite = sol.fertilite
+	campagne.ru_mm = Eau.reserve_utile(sol.cc_pct, sol.pfp_pct, sol.profondeur_cm * 10.0)
 	campagne.percolation_mm_j = sol.percolation_mm_j
 	campagne.hauteur_diguette_mm = diguette_h * 1000.0
 	campagne.q_canal_m3_s = _capacite_canal(VRAI.pente_canal)
 	campagne.efficience = EFFICIENCE
 	campagne.q_riviere_m3_s = VRAI.q_riviere
-	campagne.drainage_mm_j = 25.0 if avec_drain else 0.0
+	campagne.drainage_mm_j = float(topo.drainage_naturel) + (float(topo.drain_capacite) if avec_drain else 0.0)
 	campagne.hauteur_digue_m = digue_h
 	campagne.jour_semis = jour_semis
 	# Crue : tirage selon la saison (aucune en contre-saison sèche)
 	var tirage := rng.randf()
-	if semis_idx == 0 or (semis_idx == 1 and tirage < 0.6):
+	# Probabilité de crue : selon le site et selon la pluie du mois (aucune en saison sèche)
+	var pluie_cycle: float = climat.pluie_mm[Meteo.mois_du_jour(jour_semis + 40)] * site.pluie_pct / 100.0
+	var proba: float = float(topo.crue_proba) * clamp((pluie_cycle - 60.0) / 140.0, 0.0, 1.0)
+	if VRAI.crue_10ans > 0.0 and tirage < proba:
 		campagne.crue_jour = rng.randi_range(32, 46)
-		campagne.crue_duree = 4
+		campagne.crue_duree = int(topo.crue_duree)
 		var t2 := rng.randf()
 		campagne.crue_hauteur_m = VRAI.crue_2ans if t2 < 0.55 else (VRAI.crue_10ans if t2 < 0.9 else VRAI.crue_50ans)
 	campagne.demarrer()
@@ -1095,6 +1204,17 @@ func _ecran_bilan() -> void:
 	_sauvegarder(r, total)
 
 
+func _q_min_cycle() -> float:
+	var q := 1.0e9
+	for j in range(campagne.jour_semis, campagne.jour_semis + campagne.duree(), 15):
+		q = min(q, VRAI.q_riviere[Meteo.mois_du_jour(j)])
+	return q
+
+func _riviere_insuffisante() -> bool:
+	var besoin: float = Eau.debit_equipement(Eau.debit_fictif_continu(_besoin_brut_pointe(campagne.percolation_mm_j)), 5.0)
+	return _q_min_cycle() < besoin
+
+
 func _valeur_ouvrages() -> float:
 	var v := 0.0
 	for c in charges:
@@ -1110,7 +1230,7 @@ func _debriefing(r: Dictionary, ratio: float) -> String:
 		n += 1
 		var causes: Array = []
 		if ratio < 1.0: causes.append("ton canal ne passe que %.0f %% du débit nécessaire" % (ratio * 100.0))
-		if semis_idx == 2: causes.append("en contre-saison le marigot ne fournit que 4 à 6 L/s")
+		if _riviere_insuffisante(): causes.append("à cette saison le marigot ne fournit pas le débit nécessaire (minimum %.1f L/s sur le cycle)" % (_q_min_cycle() * 1000.0))
 		if evenements.has("litige"): causes.append("ta prise est restée fermée 12 jours pendant le litige")
 		if causes.is_empty(): causes.append("la poche de sécheresse a dépassé la capacité du réseau")
 		bb += "[b]%d. Stress hydrique : %d jours, rendement réduit à %d %% sur ce critère[/b]\n[u]Ce qui s'est passé[/u] : le riz a manqué d'eau.\n[u]Pourquoi[/u] : %s.\n[u]Ce que dit ton cours[/u] : besoin brut = besoin net ÷ efficience ; le Qfc sert à dimensionner les canaux (L3 Bases techniques, ch. 1 et 4). L'étude hydrologique vérifie que la ressource couvre les besoins durant toute la campagne (ch. 5.1.3).\n[u]Ce qu'il fallait faire[/u] : dimensionner le canal sur le besoin de pointe, et choisir une date de repiquage compatible avec le débit du marigot.\n\n" % [n, campagne.jours_stress, int(r.rel_eau * 100.0), ", ".join(causes)]
@@ -1128,7 +1248,7 @@ func _debriefing(r: Dictionary, ratio: float) -> String:
 		bb += "[b]%d. Canal surdimensionné[/b]\n[u]Ce qui s'est passé[/u] : ton canal passe %.1f fois le débit nécessaire.\n[u]Pourquoi[/u] : %s.\n[u]Ce qu'il fallait faire[/u] : viser le débit de projet avec une marge raisonnable ; chaque m³ de terrassement coûte.\n\n" % [n, ratio, "pente du tracé sous-estimée faute de levé topographique" if not fait.has("topo") else "dimensions trop généreuses"]
 	if not fait.has("sol"):
 		n += 1
-		bb += "[b]%d. Sol non étudié[/b]\n[u]Ce qui s'est passé[/u] : tu as calculé avec une percolation de 6 mm/j (sol jugé limoneux) alors que le sol est argileux (2 mm/j).\n[u]Ce que dit ton cours[/u] : la texture commande l'infiltration et la rétention (L3 Bases techniques, ch. 3 ; L2 Pédogenèse).\n[u]Ce qu'il fallait faire[/u] : une étude pédologique à %s évite de surdimensionner tout le réseau.\n\n" % [n, _fcfa(couts.etudes.pedologie)]
+		bb += "[b]%d. Sol non étudié[/b]\n[u]Ce qui s'est passé[/u] : tu as calculé avec une percolation de %.0f mm/j (sol jugé limoneux à l'œil) alors que la vraie valeur est %.0f mm/j (sol %s, structure %s).\n[u]Ce que dit ton cours[/u] : la texture commande l'infiltration et la rétention (L3 Bases techniques, ch. 3 ; L2 Pédogenèse).\n[u]Ce qu'il fallait faire[/u] : une étude pédologique à %s évite de surdimensionner tout le réseau.\n\n" % [n, CROYANCE.sol.percolation_mm_j, VRAI.sol.percolation_mm_j, VRAI.sol.nom.to_lower(), VRAI.sol.structure_nom, _fcfa(couts.etudes.pedologie)]
 	if n == 0:
 		bb += "Rien à redire : diagnostic complet, calculs justes, ouvrages bien dimensionnés. Essaie maintenant la contre-saison sèche, ou supprime une étude pour voir ce qu'elle t'apportait."
 	return bb
@@ -1165,7 +1285,7 @@ func _boutons() -> Array:
 ## Parcours par de vrais clics sur les boutons (vérifie les branchements de l'interface)
 func _pilote_clics() -> void:
 	await get_tree().create_timer(0.5).timeout
-	_boutons()[0].pressed.emit()
+	_boutons()[_boutons().size() - 1].pressed.emit()
 	while _boutons().size() > 1:
 		_boutons()[0].pressed.emit()
 		await get_tree().process_frame
@@ -1176,7 +1296,7 @@ func _pilote_clics() -> void:
 	await _capture("clics_1_etudes")
 	_boutons()[0].pressed.emit()
 	await get_tree().process_frame
-	_boutons()[4].pressed.emit()
+	_boutons()[5].pressed.emit()
 	await get_tree().create_timer(0.2).timeout
 	await _capture("clics_2_calcul_besoins")
 	popup_boutons.get_child(popup_boutons.get_child_count() - 1).pressed.emit()
@@ -1229,13 +1349,26 @@ func _pilote_auto(mode: String) -> void:
 	cam_dist = 300.0
 	await get_tree().create_timer(0.3).timeout
 	await _capture(mode + "_2_etudes")
-	semis_idx = 0 if bon else 2
+	semis_idx = 0 if bon else 3
+	if OS.get_environment("AGRISIM_SEMIS") != "":
+		semis_idx = int(OS.get_environment("AGRISIM_SEMIS"))
 	_aller(Etape.BESOINS)
 	var perc: float = _sol_connu().percolation_mm_j
 	q_projet = Eau.debit_equipement(Eau.debit_fictif_continu(_besoin_brut_pointe(perc)), 5.0)
 	quiz_juste = bon
 	if bon:
-		canal_b = 0.2; canal_h = 0.30; diguette_h = 0.20; avec_drain = true; digue_h = 1.0
+		# L'ingénieur soigneux : plus petit canal qui passe 1,2 fois le débit de projet, digue calée sur la crue décennale
+		diguette_h = 0.20; avec_drain = true
+		digue_h = ceil((VRAI.crue_10ans + 0.1) * 10.0) / 10.0 if VRAI.crue_10ans > 0.0 else 0.0
+		var trouve := false
+		for hh in [0.25, 0.3, 0.35, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]:
+			for bb in [0.2, 0.3, 0.4, 0.6, 0.8, 1.0, 1.5, 2.0]:
+				canal_b = bb; canal_h = hh
+				if not trouve and _capacite_canal(VRAI.pente_canal) >= 1.2 * q_projet:
+					trouve = true
+					break
+			if trouve:
+				break
 	else:
 		canal_b = 0.2; canal_h = 0.20; diguette_h = 0.10; avec_drain = false; digue_h = 0.0
 	_aller(Etape.CONCEPTION)

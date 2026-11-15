@@ -18,7 +18,8 @@
     "terrassement_m3": 1500,
     "revetement_beton_m2": 12000,
     "ouvrage_prise": 250000,
-    "drain_ml": 1000
+    "drain_ml": 1000,
+    "planage_m3": 300
   },
   "campagne_par_ha": {
     "semences": 30000,

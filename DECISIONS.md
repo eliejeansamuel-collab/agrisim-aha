@@ -19,3 +19,5 @@ Chaque décision peut être annulée ; l'alternative et son coût sont indiqués
 | 13 | Procédure foncière en 5 démarches à effet probabiliste | Cours « Droit foncier rural » manquant ; textes à vérifier | Procédure détaillée conforme aux textes en vigueur | Moyen (contenu) |
 | 14 | Orientation paysage | Vue 3D + panneau lisibles | Portrait | Moyen (interface) |
 | 15 | Les cours ne sont **pas versionnés** dans git (`.gitignore`) | Volume (230 Mo) et droits des enseignants | — | — |
+| 16 | Débit du marigot = 0,0254 × (pluie décalée / 100)² × facteur de bassin ; crues = hauteurs de base × facteur du relief | Relier simplement ressource et climat choisi, sans données de jaugeage | Débits mesurés ou modèle pluie-débit calé | Faible (`_generer_site`) |
+| 17 | Effets de la structure du sol (percolation × 0,6 à 1,3 ; fertilité 0,85 à 1,0) : paramètres de jeu | Le cours donne le sens de l'effet, pas de chiffres | Valeurs mesurées | Faible (`sols.json`) |

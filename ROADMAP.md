@@ -1,6 +1,6 @@
 # Feuille de route
 
-Mise à jour : 15 novembre 2026, fin de la première session.
+Mise à jour : 15 novembre 2026, fin de la deuxième session.
 
 ## Fait et vérifié
 
@@ -8,6 +8,8 @@ Mise à jour : 15 novembre 2026, fin de la première session.
 - **Moteur de simulation** (`jeu/moteur/`) : 6 modules, **72 tests réussis** (`sh jeu/tests/lancer.sh`), dont les exercices corrigés du cours Bases techniques et deux exemples FAO-56. Bilan d'eau fermé à 10⁻¹³ mm près.
 - **Tranche verticale 3D** (`jeu/scenes/`) : bas-fond rizicole de 5 ha jouable de bout en bout sur PC — foncier (5 démarches), études (3), quiz du débit de projet, conception (canal, diguettes, digue, drain) avec devis, campagne de 120 jours animée en 3D (lame d'eau, croissance, sécheresse, crue, litige), bilan (rendement, marge, VAN, TRI, 5 notes), débriefing en quatre parties, Codex, Comptes.
 - Deux parties automatiques exécutées avec captures d'écran : « bon » → 5,0 t/ha ; « mauvais » → 2,0 t/ha, 58 jours de stress.
+
+- **Site paramétrable (session 2)** : écran « Nouveau projet » avec 5 régions (San-Pédro, Abidjan, Man, Bouaké, Korhogo), 4 reliefs (bas-fond, vallée encaissée, versant à 4 %, plaine alluviale), sol (3 textures × 3 structures × 3 profondeurs), climat de l'année (pluie, ET0, durée de sécheresse, hauteur des crues), tirage au hasard et indice de difficulté. Le débit du marigot, les crues, le planage, la pente du canal et le drainage en découlent. Vérifié par 5 parties automatiques sur des sites différents.
 
 ## Fait mais NON vérifié
 
@@ -29,7 +31,8 @@ Mise à jour : 15 novembre 2026, fin de la première session.
 2. **Données réelles** : MNT de la région de San-Pédro (Copernicus GLO-30) converti en carte de hauteurs et lu par `Terrain` ; normales climatiques NASA POWER dans `climat.json` ; hydrographie OSM.
 3. **Vérifications avec les enseignants** : les 6 points de FORMULES.md § 5 ; valeurs de `cultures.json` et `couts.json`.
 4. **Refactorisation** : découper `main.gd` (≈ 800 lignes) en `Partie` (état sérialisable), écrans par étape, vue 3D ; sauvegarde complète, export et import.
-5. **Phase 3** : chapitres 1 à 3 de la Carrière ; tutoriel ; irrigation manuelle (vannes, tour d'eau) ; fertilisation et amendements ; choix entre plusieurs terrains ; mini-jeu de nivellement et profil en long.
+5. **Sites** : calage des 5 climats et des 4 reliefs sur des données réelles ; ajouter température, humidité, vent et rayonnement jour par jour (Penman-Monteith est déjà codé) ; effets de la vitesse d'eau (érosion des canaux en terre) ; autres cultures que le riz selon le site.
+6. **Phase 3** : chapitres 1 à 3 de la Carrière ; tutoriel ; irrigation manuelle (vannes, tour d'eau) ; fertilisation et amendements ; choix entre plusieurs terrains ; mini-jeu de nivellement et profil en long.
 6. **Phase 4** : retenue et barrage en terre, forage et essai de pompage, pompage et réseau sous pression, qualité de l'eau (scénario « L'eau trop salée »), financement détaillé.
 7. **Phase 5** : scénarios, Bureau d'études, bac à sable, révision espacée, sons, packs graphiques CC0, carte de Côte d'Ivoire.
 8. **Phase 6** : campagne de tests sur appareil, livraison.
