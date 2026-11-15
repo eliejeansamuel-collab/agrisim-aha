@@ -33,6 +33,7 @@ var journal: Array = []
 var tot := {"pluie": 0.0, "irrigation": 0.0, "etm": 0.0, "etr": 0.0, "percolation": 0.0,
 	"drainage": 0.0, "debordement": 0.0, "preleve_m3": 0.0}
 var jours_stress := 0
+var jours_stress_floraison := 0   # le riz est très sensible au manque d'eau à la floraison
 var jours_debordement := 0
 var jours_submersion := 0
 var stock_initial := 0.0
@@ -95,6 +96,9 @@ func jour_suivant() -> Dictionary:
 	etr = pris + reste
 	if ks < 0.999 and not assec:
 		jours_stress += 1
+		var d1: int = int(culture.durees_stades[0]) + int(culture.durees_stades[1])
+		if jour > d1 and jour <= d1 + int(culture.durees_stades[2]):
+			jours_stress_floraison += 1
 	# Drainage puis débordement par-dessus les diguettes
 	var seuil: float = hauteur_diguette_mm if not assec else 0.0
 	var draine := 0.0
@@ -140,9 +144,10 @@ func resultat() -> Dictionary:
 	var rel_eau: float = Eau.rendement_relatif(tot.etr, tot.etm, culture.ky)
 	var rel_crue: float = clamp(1.0 - float(culture.get("perte_par_jour_submersion", 0.12)) * jours_submersion, 0.0, 1.0)
 	var rel_debord: float = clamp(1.0 - 0.01 * jours_debordement, 0.7, 1.0)
-	var rdt: float = culture.rendement_max_t_ha * rel_eau * rel_crue * rel_debord * facteur_fertilite
+	var rel_floraison: float = clamp(1.0 - float(culture.get("perte_par_jour_stress_floraison", 0.0)) * jours_stress_floraison, 0.3, 1.0)
+	var rdt: float = culture.rendement_max_t_ha * rel_eau * rel_floraison * rel_crue * rel_debord * facteur_fertilite
 	return {"rendement_t_ha": rdt, "production_t": rdt * surface_ha, "rel_eau": rel_eau,
-		"rel_crue": rel_crue, "rel_debordement": rel_debord, "jours_stress": jours_stress,
+		"rel_floraison": rel_floraison, "rel_crue": rel_crue, "rel_debordement": rel_debord, "jours_stress": jours_stress,
 		"jours_submersion": jours_submersion, "jours_debordement": jours_debordement,
 		"productivite_eau_kg_m3": (rdt * surface_ha * 1000.0) / max(tot.preleve_m3, 1.0)}
 

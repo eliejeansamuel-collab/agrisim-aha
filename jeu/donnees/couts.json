@@ -1,9 +1,32 @@
 {
   "_note": "Toutes les valeurs sont INDICATIVES (FCFA) et modifiables. À remplacer par des devis réels.",
   "capital_initial": 6000000,
-  "foncier": {"enquete_coutumiere": 50000, "comite_villageois": 75000, "geometre_bornage": 350000, "certificat_foncier": 250000, "notaire_bail": 300000, "loyer_annuel_ha": 30000},
-  "etudes": {"topographie": 400000, "pedologie": 250000, "hydrologie": 300000},
-  "travaux": {"terrassement_m3": 2500, "revetement_beton_m2": 12000, "ouvrage_prise": 450000, "drain_ml": 1500},
-  "campagne_par_ha": {"semences": 30000, "engrais": 110000, "main_oeuvre": 220000, "protection": 40000, "recolte_battage": 90000},
-  "eau_redevance_m3": 3
+  "foncier": {
+    "enquete_coutumiere": 50000,
+    "comite_villageois": 75000,
+    "geometre_bornage": 200000,
+    "certificat_foncier": 25000,
+    "notaire_bail": 150000,
+    "loyer_annuel_ha": 30000
+  },
+  "etudes": {
+    "topographie": 150000,
+    "pedologie": 120000,
+    "hydrologie": 150000
+  },
+  "travaux": {
+    "terrassement_m3": 1500,
+    "revetement_beton_m2": 12000,
+    "ouvrage_prise": 250000,
+    "drain_ml": 1000
+  },
+  "campagne_par_ha": {
+    "semences": 30000,
+    "engrais": 110000,
+    "main_oeuvre": 220000,
+    "protection": 40000,
+    "recolte_battage": 90000
+  },
+  "eau_redevance_m3": 3,
+  "litige": 600000
 }

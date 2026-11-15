@@ -1,0 +1,32 @@
+# Construit l'APK Android et lance les tests à chaque push.
+# NON TESTÉ dans l'environnement de développement (SDK Android inaccessible) : voir ROADMAP.md.
+name: APK Android
+on: [push, workflow_dispatch]
+jobs:
+  tests-et-apk:
+    runs-on: ubuntu-latest
+    container: barichello/godot-ci:4.4.1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Modèles d'export
+        run: |
+          mkdir -p ~/.local/share/godot/export_templates/
+          ln -s /root/.local/share/godot/export_templates/4.4.1.stable ~/.local/share/godot/export_templates/4.4.1.stable || true
+      - name: Import et tests du moteur
+        run: |
+          cd jeu
+          godot --headless --import || true
+          godot --headless -s tests/run_tests.gd
+      - name: Clé de débogage et réglages Android
+        run: |
+          keytool -genkeypair -v -keystore /root/debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Android Debug,O=Android,C=US"
+          mkdir -p ~/.config/godot
+          printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\nexport/android/android_sdk_path = "/usr/lib/android-sdk"\nexport/android/java_sdk_path = "/usr/lib/jvm/java-17-openjdk-amd64"\nexport/android/debug_keystore = "/root/debug.keystore"\nexport/android/debug_keystore_user = "androiddebugkey"\nexport/android/debug_keystore_pass = "android"\n' > ~/.config/godot/editor_settings-4.4.tres
+      - name: Export de l'APK
+        run: |
+          cd jeu && mkdir -p build
+          godot --headless --export-debug "Android" build/AgriSimAHA.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AgriSimAHA-apk
+          path: jeu/build/AgriSimAHA.apk

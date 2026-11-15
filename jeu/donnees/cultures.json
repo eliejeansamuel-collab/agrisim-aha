@@ -1,20 +1,35 @@
 {
   "riz_irrigue": {
     "nom": "Riz irrigué (cycle 120 jours après repiquage)",
-    "durees_stades": [20, 30, 40, 30],
-    "kc_ini": 1.05, "kc_mid": 1.20, "kc_fin": 0.75,
+    "durees_stades": [
+      20,
+      30,
+      40,
+      30
+    ],
+    "kc_ini": 1.05,
+    "kc_mid": 1.2,
+    "kc_fin": 0.75,
     "ky": 1.1,
     "rendement_max_t_ha": 5.0,
     "prix_fcfa_kg": 200,
     "jours_assec": 10,
     "perte_par_jour_submersion": 0.12,
     "statut": "valeur indicative",
-    "source": "Kc : FAO-56 tableau 12 (riz). Ky, rendement, prix : ordres de grandeur à vérifier (FAO-33/66, CNRA, ANADER, prix locaux du paddy)."
+    "source": "Kc : FAO-56 tableau 12 (riz). Ky, rendement, prix : ordres de grandeur à vérifier (FAO-33/66, CNRA, ANADER, prix locaux du paddy). Pertes par jour de submersion et de stress à la floraison : paramètres de jeu indicatifs, à caler.",
+    "perte_par_jour_stress_floraison": 0.012
   },
   "tomate": {
     "nom": "Tomate",
-    "durees_stades": [30, 40, 45, 30],
-    "kc_ini": 0.6, "kc_mid": 1.15, "kc_fin": 0.8,
+    "durees_stades": [
+      30,
+      40,
+      45,
+      30
+    ],
+    "kc_ini": 0.6,
+    "kc_mid": 1.15,
+    "kc_fin": 0.8,
     "ky": 1.05,
     "rendement_max_t_ha": 25.0,
     "prix_fcfa_kg": 250,
