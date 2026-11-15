@@ -1,0 +1,6 @@
+{
+  "_note": "Classes qualitatives du cours Bases techniques ch. 3 (sableux/limoneux/argileux). Valeurs chiffrées indicatives (FAO-56 tableau 19), à vérifier.",
+  "argileux":  {"nom": "Argileux (bas-fond)", "cc_pct": 38, "pfp_pct": 24, "percolation_mm_j": 2.0, "infiltration": "faible", "retention": "forte", "ks_strickler_terre": 30},
+  "limoneux":  {"nom": "Limoneux", "cc_pct": 30, "pfp_pct": 15, "percolation_mm_j": 6.0, "infiltration": "moyenne", "retention": "moyenne à forte", "ks_strickler_terre": 30},
+  "sableux":   {"nom": "Sableux", "cc_pct": 14, "pfp_pct": 6, "percolation_mm_j": 20.0, "infiltration": "forte", "retention": "faible", "ks_strickler_terre": 30}
+}

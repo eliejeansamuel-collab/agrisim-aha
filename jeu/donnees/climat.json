@@ -1,0 +1,14 @@
+{
+  "san_pedro": {
+    "nom": "San-Pédro (Bas-Sassandra)",
+    "latitude": 4.75,
+    "altitude_m": 30,
+    "statut": "valeur indicative",
+    "source": "Ordres de grandeur d'un climat subéquatorial bimodal du littoral sud-ouest ivoirien. À REMPLACER par des séries réelles (NASA POWER, SODEXAM) : voir ROADMAP.md.",
+    "pluie_mm":   [35, 55, 105, 135, 260, 400, 140, 60, 110, 160, 140, 70],
+    "jours_pluie":[3, 5, 8, 10, 17, 21, 12, 8, 11, 14, 12, 6],
+    "et0_mm_j":   [4.2, 4.5, 4.6, 4.4, 3.8, 3.0, 3.0, 3.1, 3.4, 3.8, 4.0, 4.0],
+    "tmin":       [23, 24, 24, 24, 24, 23, 23, 22, 23, 23, 24, 23],
+    "tmax":       [31, 32, 32, 32, 31, 29, 28, 28, 29, 30, 31, 31]
+  }
+}
