@@ -10,7 +10,7 @@ var VRAI := {}
 # Ce que le joueur « croit » sans étude (estimation à l'œil)
 var CROYANCE := {}
 # --- Configuration du site (écran « Nouveau projet ») ---
-var site := {"region": "san_pedro", "topo": "bas_fond", "texture": "argileux", "structure": "polyedrique",
+var site := {"mode": "exercice", "ville": "san_pedro", "region": "san_pedro", "topo": "bas_fond", "texture": "argileux", "structure": "polyedrique",
 	"profondeur": 50, "pluie_pct": 100.0, "et0_pct": 100.0, "secheresse_j": 15.0, "crues_pct": 100.0}
 var climats: Dictionary
 var topos: Dictionary
@@ -65,7 +65,7 @@ var diguette_h := 0.20
 var avec_drain := false
 var digue_h := 0.0
 var campagne: Campagne
-var vitesse := 6.0            # jours simulés par seconde
+var vitesse := 2.0            # jours simulés par seconde
 var en_pause := false
 var cumul_temps := 0.0
 var evenements: Array = []
@@ -88,7 +88,12 @@ var avatar: Node3D
 var amenagement: Node3D
 var eau_mm: MultiMeshInstance3D
 var riz_mm: MultiMeshInstance3D
-var riz_mat: StandardMaterial3D
+var riz_mat: ShaderMaterial
+var monde: MondeVivant
+var reel: DonneesReelles
+var villes: Dictionary
+var etat_reseau := ""
+var heure_libre := 9.0
 var eau_mat: StandardMaterial3D
 var nappe_crue: MeshInstance3D
 var bornes: Node3D
@@ -106,6 +111,11 @@ func _ready() -> void:
 	climats = _json("res://donnees/climat.json")
 	topos = _json("res://donnees/topographies.json")
 	topos.erase("_note")
+	villes = _json("res://donnees/villes.json")
+	villes.erase("_note")
+	reel = DonneesReelles.new()
+	add_child(reel)
+	reel.termine.connect(_donnees_reelles_recues)
 	climat = climats.san_pedro
 	topo = topos.bas_fond
 	riz = _json("res://donnees/cultures.json").riz_irrigue
@@ -125,6 +135,8 @@ func _ready() -> void:
 	_creer_monde()
 	_creer_interface()
 	_nouvelle_partie()
+	if not DonneesReelles.lire_cache(site.ville).is_empty():
+		reel.telecharger(site.ville, villes[site.ville])
 	if OS.get_environment("AGRISIM_AUTO") != "":
 		_pilote_auto(OS.get_environment("AGRISIM_AUTO"))
 
@@ -159,6 +171,9 @@ func _creer_monde() -> void:
 	soleil.shadow_enabled = true
 	soleil.directional_shadow_max_distance = 900.0
 	add_child(soleil)
+	monde = MondeVivant.new()
+	add_child(monde)
+	monde.installer(env, mat_ciel, soleil)
 	cam = Camera3D.new()
 	cam.far = 3000.0
 	cam.fov = 50.0
@@ -374,7 +389,8 @@ func _construire_amenagement() -> void:
 	mr.instance_count = 40 * 50
 	riz_mm = MultiMeshInstance3D.new()
 	riz_mm.multimesh = mr
-	riz_mat = _mat(Color(0.35, 0.75, 0.25))
+	riz_mat = ShaderMaterial.new()
+	riz_mat.shader = load("res://scenes/riz.gdshader")
 	riz_mm.material_override = riz_mat
 	amenagement.add_child(riz_mm)
 	_maj_parcelle(0.0, 0.0, 0.0)
@@ -415,7 +431,8 @@ func _maj_parcelle(lame_mm: float, croissance: float, maturite: float) -> void:
 			riz_mm.multimesh.set_instance_transform(k, Transform3D(Basis().scaled(Vector3(1, haut, 1)), Vector3(x, y + haut / 2.0, z)))
 			k += 1
 	riz_mm.visible = croissance > 0.0
-	riz_mat.albedo_color = Color(0.30, 0.72, 0.22).lerp(Color(0.85, 0.72, 0.25), maturite)
+	var cr: Color = Color(0.30, 0.72, 0.22).lerp(Color(0.85, 0.72, 0.25), maturite)
+	riz_mat.set_shader_parameter("couleur", Vector3(cr.r, cr.g, cr.b))
 
 
 # =====================================================================
@@ -426,6 +443,18 @@ func _process(delta: float) -> void:
 	var dir := Vector3(sin(cam_yaw) * cos(cam_pitch), sin(cam_pitch), cos(cam_yaw) * cos(cam_pitch))
 	cam.position = cam_cible + dir * cam_dist
 	cam.look_at(cam_cible)
+	# Heure du jour : pendant la campagne elle suit le temps simulé ; sinon elle s'écoule doucement
+	if etape == Etape.CAMPAGNE and campagne != null and not campagne.termine:
+		monde.heure = fmod(6.0 + cumul_temps * 24.0, 24.0)
+		monde.ouvriers_actifs = true
+	else:
+		heure_libre = fmod(heure_libre + delta * 24.0 / 240.0, 24.0)
+		monde.heure = heure_libre
+		monde.ouvriers_actifs = false
+		monde.il_pleut = false
+	if OS.get_environment("AGRISIM_HEURE") != "":
+		monde.heure = float(OS.get_environment("AGRISIM_HEURE"))
+	monde.maj(delta, cam_cible)
 	if etape == Etape.CAMPAGNE and campagne != null and not en_pause and not campagne.termine and not popup.visible:
 		cumul_temps += delta * vitesse
 		while cumul_temps >= 1.0 and not campagne.termine and not popup.visible:
@@ -728,6 +757,24 @@ func _aller(e: int) -> void:
 func _generer_site() -> void:
 	climat = climats[site.region]
 	topo = topos[site.topo]
+	Terrain.vider_grille()
+	var cache := DonneesReelles.lire_cache(site.ville)
+	if site.mode == "reel" and not cache.is_empty():
+		# Relief et climat réels du lieu (cache local : fonctionne hors connexion)
+		climat = cache.climat
+		Terrain.DEMI_FOND = 400.0
+		Terrain.H_VERSANT = 0.0
+		Terrain.charger_grille(cache.altitudes, int(cache.n))
+		var pentes: Array = Terrain.pentes_parcelle()
+		var modele: String = "plaine" if pentes[0] + pentes[1] < 0.003 else ("versant" if pentes[1] > 0.025 else ("vallee_pentue" if pentes[0] > 0.01 else "bas_fond"))
+		topo = topos[modele].duplicate()
+		topo.nom = "Relief réel (satellite, maille 90 m)"
+		topo.description = "Pentes mesurées sur la parcelle : %.1f ‰ en long, %.1f ‰ en travers. Comportement hydrologique rapproché du type « %s »." % [pentes[0] * 1000.0, pentes[1] * 1000.0, topos[modele].nom.to_lower()]
+		topo.pente_long = pentes[0]
+		topo.pente_trans = pentes[1]
+		topo.pente_canal = clamp(pentes[0] * 0.3, 0.0002, 0.004)
+		topo.demi_fond = 400.0
+		topo.h_versant = 0.0
 	var tex: Dictionary = sols.textures[site.texture]
 	var stru: Dictionary = sols.structures[site.structure]
 	var sol := {"nom": tex.nom, "structure_nom": stru.nom, "cc_pct": tex.cc_pct, "pfp_pct": tex.pfp_pct,
@@ -743,7 +790,8 @@ func _generer_site() -> void:
 		"crue_2ans": 0.5 * kc, "crue_10ans": 0.9 * kc, "crue_50ans": 1.2 * kc}
 	var lim: Dictionary = sols.textures.limoneux
 	CROYANCE = {"sol": {"nom": lim.nom, "percolation_mm_j": lim.percolation_mm_j}, "pente_canal": float(topo.pente_canal) * 0.3, "crue": 0.5}
-	Terrain.configurer(topo)
+	if Terrain.grille_n == 0:
+		Terrain.configurer(topo)
 	_reconstruire_terrain()
 	for c in decor.get_children():
 		c.queue_free()
@@ -751,6 +799,18 @@ func _generer_site() -> void:
 	_creer_decor()
 	avatar.position = Vector3(60, Terrain.hauteur(60, -150), -150)
 	cam_cible = Vector3(140, Terrain.hauteur(140, 0), 0)
+
+
+func _donnees_reelles_recues(ok: bool, message: String) -> void:
+	if ok:
+		site.mode = "reel"
+		etat_reseau = "Connecté : données mises à jour."
+		if etape == Etape.INTRO:
+			_generer_site()
+	else:
+		etat_reseau = "Hors connexion (%s). %s" % [message, "Le jeu continue avec les dernières données enregistrées." if not DonneesReelles.lire_cache(site.ville).is_empty() else "Le jeu continue avec le site d'exercice."]
+	if etape == Etape.INTRO:
+		_ecran_intro()
 
 
 func _suivant(liste: Array, valeur) -> Variant:
@@ -776,10 +836,34 @@ func _ecran_intro() -> void:
 	var total_pluie := 0.0
 	for v in climat.pluie_mm:
 		total_pluie += v
-	_bouton("Région : %s\n%s · %.0f mm/an" % [climat.nom, climat.zone, total_pluie * site.pluie_pct / 100.0], func():
-		site.region = _suivant(climats.keys(), site.region); _generer_site(); _ecran_intro())
-	_bouton("Relief : %s\n%s" % [topo.nom, topo.description], func():
-		site.topo = _suivant(topos.keys(), site.topo); _generer_site(); _ecran_intro())
+	var v: Dictionary = villes[site.ville]
+	var cache := DonneesReelles.lire_cache(site.ville)
+	_bouton("Lieu : %s (%.2f° N, %.2f° O)" % [v.nom, v.lat, -v.lon], func():
+		site.ville = _suivant(villes.keys(), site.ville)
+		site.region = villes[site.ville].climat_exercice
+		if DonneesReelles.lire_cache(site.ville).is_empty():
+			site.mode = "exercice"
+		etat_reseau = ""
+		_generer_site(); _ecran_intro())
+	var etat := "Aucune donnée réelle enregistrée pour ce lieu." if cache.is_empty() else "Données réelles enregistrées le %s : utilisables hors connexion." % cache.date
+	if etat_reseau != "":
+		etat += "\n" + etat_reseau
+	_texte("[color=#9fd3ff]%s[/color]" % etat)
+	_bouton("Téléchargement en cours…" if reel.en_cours else ("Télécharger le relief et le climat réels (satellite)" if cache.is_empty() else "Mettre à jour les données réelles"), func():
+		etat_reseau = ""
+		reel.telecharger(site.ville, villes[site.ville])
+		_ecran_intro(), not reel.en_cours)
+	if not cache.is_empty():
+		_bouton("Terrain utilisé : %s" % ("RÉEL (satellite)" if site.mode == "reel" else "site d'exercice au choix"), func():
+			site.mode = "exercice" if site.mode == "reel" else "reel"
+			_generer_site(); _ecran_intro())
+	if site.mode == "reel" and not cache.is_empty():
+		_texte("[b]%s[/b] · %.0f mm/an · altitude %.0f m\n[b]%s[/b]\n%s\n[i]Le satellite ne voit pas le sol sous la surface : choisis-le ci-dessous. Le marigot est placé par convention.[/i]" % [climat.nom, total_pluie * site.pluie_pct / 100.0, climat.altitude_m, topo.nom, topo.description])
+	else:
+		_bouton("Région climatique : %s\n%s · %.0f mm/an" % [climat.nom, climat.zone, total_pluie * site.pluie_pct / 100.0], func():
+			site.region = _suivant(climats.keys(), site.region); _generer_site(); _ecran_intro())
+		_bouton("Relief : %s\n%s" % [topo.nom, topo.description], func():
+			site.topo = _suivant(topos.keys(), site.topo); _generer_site(); _ecran_intro())
 	_bouton("Texture du sol : %s" % sols.textures[site.texture].nom, func():
 		site.texture = _suivant(sols.textures.keys(), site.texture); _generer_site(); _ecran_intro())
 	_bouton("Structure du sol : %s" % sols.structures[site.structure].nom, func():
@@ -1058,6 +1142,7 @@ func _demarrer_campagne() -> void:
 		var t2 := rng.randf()
 		campagne.crue_hauteur_m = VRAI.crue_2ans if t2 < 0.55 else (VRAI.crue_10ans if t2 < 0.9 else VRAI.crue_50ans)
 	campagne.demarrer()
+	monde.placer_ouvriers()
 	en_pause = false
 	cumul_temps = 0.0
 	_ecran_campagne()
@@ -1069,7 +1154,7 @@ func _ecran_campagne() -> void:
 	_texte("")
 	var ligne := HBoxContainer.new()
 	panneau.add_child(ligne)
-	for v in [["Pause", 0.0], ["×1", 6.0], ["×3", 18.0]]:
+	for v in [["Pause", 0.0], ["1 j = 5 s", 0.2], ["Normal", 2.0], ["Rapide", 12.0]]:
 		var b := Button.new()
 		b.text = v[0]
 		b.custom_minimum_size = Vector2(0, 48)
@@ -1126,16 +1211,30 @@ func _jour_de_campagne() -> void:
 		var hc: float = campagne.crue_hauteur_m
 		nappe_crue.position = Vector3(40 if l.submerge else -120, Terrain.hauteur(140, 0) + (hc * 0.8 if l.submerge else -0.2), 0)
 		(nappe_crue.mesh as PlaneMesh).size = Vector2(620 if l.submerge else 300, Terrain.TAILLE)
+	monde.il_pleut = l.pluie > 4.0
+	monde.nebulosite = clamp(0.2 + l.pluie / 25.0, 0.0, 1.0)
+	var vents: Array = climat.get("vent_m_s", [])
+	monde.vent = clamp((float(vents[Meteo.mois_du_jour(campagne.jour_semis + campagne.jour)]) if vents.size() == 12 else 2.0) / 2.0 + (0.8 if monde.il_pleut else 0.0), 0.3, 2.5)
+	riz_mat.set_shader_parameter("vent", monde.vent)
 	jours_ecoules += 1
 	_maj_hud()
 	if panneau.get_child_count() >= 3:
 		var etat := "[color=#8fd18f]confort hydrique[/color]" if l.ks > 0.99 else "[color=#ff7b7b]STRESS HYDRIQUE (Ks = %.2f)[/color]" % l.ks
 		if l.submerge:
 			etat = "[color=#ff7b7b]CASIERS SUBMERGÉS PAR LA CRUE[/color]"
-		(panneau.get_child(0) as RichTextLabel).text = "[b]Jour %d / %d[/b] — stade : %s\nPluie : %.0f mm · ET0 : %.1f mm · Kc : %.2f\nIrrigation : %.1f mm · Lame d'eau : [b]%.0f mm[/b]\nÉtat : %s" % [campagne.jour, campagne.duree(), _stade(campagne.jour), l.pluie, l.et0, l.kc, l.irrigation, l.lame, etat]
+		(panneau.get_child(0) as RichTextLabel).text = "[b]Jour %d / %d[/b] — stade : %s\nAux champs : %s\nPluie : %.0f mm · ET0 : %.1f mm · Kc : %.2f\nIrrigation : %.1f mm · Lame d'eau : [b]%.0f mm[/b]\nÉtat : %s" % [campagne.jour, campagne.duree(), _stade(campagne.jour), _travail_du_jour(campagne.jour), l.pluie, l.et0, l.kc, l.irrigation, l.lame, etat]
 		(panneau.get_child(2) as RichTextLabel).text = "[b]Bilan d'eau cumulé (mm)[/b]\nPluie %.0f + irrigation %.0f\n= ETr %.0f + percolation %.0f + drainage %.0f + débordement %.0f + stock\nJours de stress : %d · de submersion : %d · de débordement : %d\nCapacité du canal : %.1f L/s%s" % [campagne.tot.pluie, campagne.tot.irrigation, campagne.tot.etr, campagne.tot.percolation, campagne.tot.drainage, campagne.tot.debordement, campagne.jours_stress, campagne.jours_submersion, campagne.jours_debordement, campagne.q_canal_m3_s * 1000.0, "  (prise fermée : litige)" if litige_jours_restants > 0 else ""]
 	if campagne.termine:
 		_aller(Etape.BILAN)
+
+
+func _travail_du_jour(j: int) -> String:
+	var d: Array = riz.durees_stades
+	if j <= 5: return "repiquage"
+	if j <= d[0] + d[1]: return "désherbage et surveillance de la lame d'eau"
+	if j <= d[0] + d[1] + d[2]: return "tours d'eau, surveillance des ravageurs"
+	if j <= campagne.duree() - 10: return "gardiennage contre les oiseaux"
+	return "assec puis récolte"
 
 
 func _stade(j: int) -> String:
@@ -1328,7 +1427,17 @@ func _pilote_auto(mode: String) -> void:
 	if mode == "clics":
 		_pilote_clics()
 		return
-	var bon := mode == "bon"
+	var bon := mode == "bon" or mode == "reel"
+	if mode == "reel":
+		site.ville = OS.get_environment("AGRISIM_VILLE") if OS.get_environment("AGRISIM_VILLE") != "" else "man"
+		reel.telecharger(site.ville, villes[site.ville])
+		var res: Array = await reel.termine
+		print("RESEAU ", res, " cache=", not DonneesReelles.lire_cache(site.ville).is_empty())
+		if not DonneesReelles.lire_cache(site.ville).is_empty():
+			site.mode = "reel"
+		_generer_site()
+		_ecran_intro()
+		print("SITE ", topo.nom, " | ", topo.description, " | pluie an=", climat.pluie_mm, " et0=", climat.et0_mm_j)
 	await get_tree().create_timer(0.5).timeout
 	await _capture(mode + "_1_arrivee")
 	_aller(Etape.FONCIER)

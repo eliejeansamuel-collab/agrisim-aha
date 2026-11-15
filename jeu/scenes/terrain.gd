@@ -9,6 +9,51 @@ static var PENTE_TRANS := 0.0025
 static var DEMI_FOND := 270.0
 static var H_VERSANT := 16.0
 
+## Relief réel : grille n x n d'altitudes (m) couvrant la fenêtre de 800 m ; vide = relief d'exercice
+static var grille: PackedFloat32Array = PackedFloat32Array()
+static var grille_n := 0
+static var grille_min := 0.0
+
+static func charger_grille(altitudes: Array, n: int) -> void:
+	grille = PackedFloat32Array(altitudes)
+	grille_n = n
+	grille_min = 1.0e9
+	for v in grille:
+		grille_min = min(grille_min, v)
+	casiers_niveles = false
+
+static func vider_grille() -> void:
+	grille = PackedFloat32Array()
+	grille_n = 0
+
+static func _altitude_grille(x: float, z: float) -> float:
+	var fx: float = clamp((x / TAILLE + 0.5) * (grille_n - 1), 0.0, grille_n - 1.001)
+	var fz: float = clamp((z / TAILLE + 0.5) * (grille_n - 1), 0.0, grille_n - 1.001)
+	var ix := int(fx)
+	var iz := int(fz)
+	var tx := fx - ix
+	var tz := fz - iz
+	# interpolation lissée entre les points du modèle numérique de terrain
+	tx = tx * tx * (3.0 - 2.0 * tx)
+	tz = tz * tz * (3.0 - 2.0 * tz)
+	var a: float = lerp(grille[iz * grille_n + ix], grille[iz * grille_n + ix + 1], tx)
+	var b: float = lerp(grille[(iz + 1) * grille_n + ix], grille[(iz + 1) * grille_n + ix + 1], tx)
+	return lerp(a, b, tz) - grille_min + 4.0
+
+## Pentes moyennes (m/m) de la parcelle d'après le relief courant : [en long (z), en travers (x)]
+static func pentes_parcelle() -> Array:
+	var a := 0.0
+	var b := 0.0
+	var c := 0.0
+	var d := 0.0
+	for k in 9:
+		var t: float = k / 8.0
+		a += _hauteur_naturelle(PARCELLE.position.x + t * PARCELLE.size.x, PARCELLE.position.y)
+		b += _hauteur_naturelle(PARCELLE.position.x + t * PARCELLE.size.x, PARCELLE.end.y)
+		c += _hauteur_naturelle(PARCELLE.position.x, PARCELLE.position.y + t * PARCELLE.size.y)
+		d += _hauteur_naturelle(PARCELLE.end.x, PARCELLE.position.y + t * PARCELLE.size.y)
+	return [abs(a - b) / 9.0 / PARCELLE.size.y, abs(c - d) / 9.0 / PARCELLE.size.x]
+
 static func configurer(t: Dictionary) -> void:
 	PENTE_LONG = t.pente_long
 	PENTE_TRANS = t.pente_trans
@@ -41,6 +86,9 @@ static func hauteur(x: float, z: float) -> float:
 	return _hauteur_naturelle(x, z)
 
 static func _hauteur_naturelle(x: float, z: float) -> float:
+	if grille_n > 0:
+		var dr: float = abs(x - x_riviere(z))
+		return _altitude_grille(x, z) + _bruit().get_noise_2d(x * 3.0, z * 3.0) * 0.12 - 1.3 * exp(-pow(dr / 7.0, 2))
 	var d: float = abs(x - x_riviere(z))
 	var h: float = 12.0 - PENTE_LONG * (z + TAILLE / 2.0)
 	h += PENTE_TRANS * min(d, DEMI_FOND)                    # légère pente transversale vers le marigot

@@ -21,3 +21,6 @@ Chaque décision peut être annulée ; l'alternative et son coût sont indiqués
 | 15 | Les cours ne sont **pas versionnés** dans git (`.gitignore`) | Volume (230 Mo) et droits des enseignants | — | — |
 | 16 | Débit du marigot = 0,0254 × (pluie décalée / 100)² × facteur de bassin ; crues = hauteurs de base × facteur du relief | Relier simplement ressource et climat choisi, sans données de jaugeage | Débits mesurés ou modèle pluie-débit calé | Faible (`_generer_site`) |
 | 17 | Effets de la structure du sol (percolation × 0,6 à 1,3 ; fertilité 0,85 à 1,0) : paramètres de jeu | Le cours donne le sens de l'effet, pas de chiffres | Valeurs mesurées | Faible (`sols.json`) |
+| 18 | Données réelles téléchargées **par le jeu lui-même** (téléphone), pas embarquées | L'environnement de développement n'a pas accès aux serveurs ; le téléphone, si | Embarquer un MNT de tout le pays (plusieurs centaines de Mo en 30 m) | Moyen |
+| 19 | Hors-ligne = cache local par lieu, mise à jour tentée au lancement ; pas de serveur de synchronisation | Zéro coût d'exploitation | Compte utilisateur + serveur | Élevé |
+| 20 | En mode réel, le type hydrologique (crues, drainage) est déduit des pentes mesurées ; le sol reste choisi par le joueur | Le satellite ne donne ni les crues ni le sol | SoilGrids (sols), données de jaugeage | Moyen |

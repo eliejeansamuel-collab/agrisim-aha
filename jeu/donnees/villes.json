@@ -1,0 +1,17 @@
+{
+  "_note": "Coordonnées approximatives du centre-ville (degrés décimaux). Le site d'exercice est une fenêtre de 800 m autour de ce point.",
+  "san_pedro": {"nom": "San-Pédro", "lat": 4.75, "lon": -6.64, "climat_exercice": "san_pedro"},
+  "sassandra": {"nom": "Sassandra", "lat": 4.95, "lon": -6.08, "climat_exercice": "san_pedro"},
+  "soubre": {"nom": "Soubré", "lat": 5.79, "lon": -6.59, "climat_exercice": "san_pedro"},
+  "abidjan": {"nom": "Abidjan", "lat": 5.35, "lon": -4.01, "climat_exercice": "abidjan"},
+  "abengourou": {"nom": "Abengourou", "lat": 6.73, "lon": -3.50, "climat_exercice": "abidjan"},
+  "gagnoa": {"nom": "Gagnoa", "lat": 6.13, "lon": -5.95, "climat_exercice": "san_pedro"},
+  "daloa": {"nom": "Daloa", "lat": 6.88, "lon": -6.45, "climat_exercice": "bouake"},
+  "yamoussoukro": {"nom": "Yamoussoukro", "lat": 6.82, "lon": -5.28, "climat_exercice": "bouake"},
+  "man": {"nom": "Man", "lat": 7.41, "lon": -7.55, "climat_exercice": "man"},
+  "bouake": {"nom": "Bouaké", "lat": 7.69, "lon": -5.03, "climat_exercice": "bouake"},
+  "bondoukou": {"nom": "Bondoukou", "lat": 8.04, "lon": -2.80, "climat_exercice": "bouake"},
+  "korhogo": {"nom": "Korhogo", "lat": 9.46, "lon": -5.63, "climat_exercice": "korhogo"},
+  "ferkessedougou": {"nom": "Ferkessédougou", "lat": 9.59, "lon": -5.19, "climat_exercice": "korhogo"},
+  "odienne": {"nom": "Odienné", "lat": 9.51, "lon": -7.56, "climat_exercice": "korhogo"}
+}
