@@ -1116,7 +1116,7 @@ func _debriefing(r: Dictionary, ratio: float) -> String:
 		bb += "[b]%d. Stress hydrique : %d jours, rendement réduit à %d %% sur ce critère[/b]\n[u]Ce qui s'est passé[/u] : le riz a manqué d'eau.\n[u]Pourquoi[/u] : %s.\n[u]Ce que dit ton cours[/u] : besoin brut = besoin net ÷ efficience ; le Qfc sert à dimensionner les canaux (L3 Bases techniques, ch. 1 et 4). L'étude hydrologique vérifie que la ressource couvre les besoins durant toute la campagne (ch. 5.1.3).\n[u]Ce qu'il fallait faire[/u] : dimensionner le canal sur le besoin de pointe, et choisir une date de repiquage compatible avec le débit du marigot.\n\n" % [n, campagne.jours_stress, int(r.rel_eau * 100.0), ", ".join(causes)]
 	if campagne.jours_submersion > 0:
 		n += 1
-		bb += "[b]%d. Submersion par la crue : %d jours[/b]\n[u]Ce qui s'est passé[/u] : une crue de %.1f m a dépassé ta digue de %.1f m.\n[u]Pourquoi[/u] : %s.\n[u]Ce que dit ton cours[/u] : une crue décennale a 10 %% de chances de se produire chaque année ; le choix de la période de retour est un compromis entre coût et risque (L3 Hydrologie appliquée, 3e partie).\n[u]Ce qu'il fallait faire[/u] : caler la digue sur la crue de projet choisie, plus une revanche.\n\n" % [n, campagne.jours_submersion, campagne.crue_hauteur_m, digue_h, "tu n'avais pas d'étude hydrologique" if not fait.has("hydro") else "tu as accepté le risque d'une crue plus rare que ta crue de projet"]
+		bb += "[b]%d. Submersion par la crue : %d jours[/b]\n[u]Ce qui s'est passé[/u] : une crue de %.1f m a dépassé ta digue de %.1f m.\n[u]Pourquoi[/u] : %s.\n[u]Ce que dit ton cours[/u] : une crue décennale a 10 %% de chances de se produire chaque année ; le choix de la période de retour est un compromis entre coût et risque (L3 Hydrologie appliquée, 3e partie).\n[u]Ce qu'il fallait faire[/u] : caler la digue sur la crue de projet choisie, plus une revanche.\n\n" % [n, campagne.jours_submersion, campagne.crue_hauteur_m, digue_h, "tu n'avais pas d'étude hydrologique" if not fait.has("hydro") else ("ta digue est plus basse que la crue de période de retour 2 ans annoncée par l'étude (%.1f m)" % VRAI.crue_2ans if digue_h < VRAI.crue_2ans else "tu as accepté le risque d'une crue plus rare que ta crue de projet")]
 	if campagne.jours_debordement > 0:
 		n += 1
 		bb += "[b]%d. Débordement des diguettes : %d jours[/b]\n[u]Ce qui s'est passé[/u] : les fortes pluies ont fait passer l'eau par-dessus les diguettes.\n[u]Pourquoi[/u] : %s.\n[u]Ce que dit ton cours[/u] : l'irrigation doit indissociablement s'accompagner d'un réseau de colature (L3 Bases techniques, ch. 2).\n[u]Ce qu'il fallait faire[/u] : prévoir un drain collecteur et des diguettes d'au moins 20 cm.\n\n" % [n, campagne.jours_debordement, "pas de drain pour évacuer l'excès" if not avec_drain else "diguettes trop basses"]
@@ -1154,7 +1154,60 @@ func _capture(nom: String) -> void:
 	get_viewport().get_texture().get_image().save_png(dossier + "/" + nom + ".png")
 
 
+func _boutons() -> Array:
+	var b: Array = []
+	for c in panneau.get_children():
+		if c is Button and not c.is_queued_for_deletion():
+			b.append(c)
+	return b
+
+
+## Parcours par de vrais clics sur les boutons (vérifie les branchements de l'interface)
+func _pilote_clics() -> void:
+	await get_tree().create_timer(0.5).timeout
+	_boutons()[0].pressed.emit()
+	while _boutons().size() > 1:
+		_boutons()[0].pressed.emit()
+		await get_tree().process_frame
+	_boutons()[0].pressed.emit()
+	while _boutons().size() > 1:
+		_boutons()[0].pressed.emit()
+		await get_tree().process_frame
+	await _capture("clics_1_etudes")
+	_boutons()[0].pressed.emit()
+	await get_tree().process_frame
+	_boutons()[4].pressed.emit()
+	await get_tree().create_timer(0.2).timeout
+	await _capture("clics_2_calcul_besoins")
+	popup_boutons.get_child(popup_boutons.get_child_count() - 1).pressed.emit()
+	await get_tree().process_frame
+	var bs := _boutons()
+	bs[bs.size() - 2].pressed.emit()
+	await get_tree().create_timer(0.2).timeout
+	await _capture("clics_3_manning")
+	popup_boutons.get_child(0).pressed.emit()
+	_boutons()[_boutons().size() - 1].pressed.emit()
+	vitesse = 60.0
+	while etape != Etape.BILAN:
+		if popup.visible:
+			popup_boutons.get_child(0).pressed.emit()
+		await get_tree().process_frame
+	await get_tree().process_frame
+	_boutons()[0].pressed.emit()
+	await get_tree().create_timer(0.2).timeout
+	await _capture("clics_4_debriefing")
+	popup_boutons.get_child(0).pressed.emit()
+	_ouvrir_codex()
+	await get_tree().create_timer(0.2).timeout
+	await _capture("clics_5_codex")
+	print("CLICS : ", campagne.resultat(), " evenements=", evenements, " tresorerie=", tresorerie)
+	get_tree().quit()
+
+
 func _pilote_auto(mode: String) -> void:
+	if mode == "clics":
+		_pilote_clics()
+		return
 	var bon := mode == "bon"
 	await get_tree().create_timer(0.5).timeout
 	await _capture(mode + "_1_arrivee")
