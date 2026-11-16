@@ -1,6 +1,8 @@
 # Construit l'APK Android et lance les tests à chaque push.
 name: APK Android
 on: [push, workflow_dispatch]
+permissions:
+  contents: write
 jobs:
   tests-et-apk:
     runs-on: ubuntu-latest
@@ -28,7 +30,18 @@ jobs:
         run: |
           cd jeu && mkdir -p build
           godot --headless --export-debug "Android" build/AgriSimAHA.apk
+          ls -la build/AgriSimAHA.apk
+          unzip -l build/AgriSimAHA.apk | grep -E "lib/|AndroidManifest|META-INF" || true
       - uses: actions/upload-artifact@v4
         with:
           name: AgriSimAHA-apk
           path: jeu/build/AgriSimAHA.apk
+      - name: Publication (lien de téléchargement direct)
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: dernier-apk
+          name: Dernier APK de test
+          body: APK de débogage construit automatiquement depuis la branche main. Version de test, non optimisée.
+          prerelease: true
+          files: jeu/build/AgriSimAHA.apk
