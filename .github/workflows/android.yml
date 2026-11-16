@@ -16,13 +16,14 @@ jobs:
           cd jeu
           godot --headless --import || true
           godot --headless -s tests/run_tests.gd
-      - name: Réglages Android de l'image (clé de débogage, SDK)
+      - name: Réglages Android (clé de débogage de l'image, SDK, Java)
         run: |
-          # Dans GitHub Actions, HOME n'est pas /root : on recopie les réglages fournis par l'image.
-          mkdir -p ~/.config
-          if [ ! -d ~/.config/godot ]; then cp -r /root/.config/godot ~/.config/godot; fi
-          ls -la ~/.config/godot
-          cat ~/.config/godot/editor_settings-*.tres || true
+          # Dans GitHub Actions, HOME n'est pas /root : on écrit nous-mêmes les réglages de l'éditeur.
+          JAVA_DIR=$(dirname $(dirname $(readlink -f $(which java))))
+          echo "Java : $JAVA_DIR" ; ls -la /root/debug.keystore /usr/lib/android-sdk
+          mkdir -p ~/.config/godot
+          printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\nexport/android/android_sdk_path = "/usr/lib/android-sdk"\nexport/android/java_sdk_path = "%s"\nexport/android/debug_keystore = "/root/debug.keystore"\nexport/android/debug_keystore_user = "androiddebugkey"\nexport/android/debug_keystore_pass = "android"\n' "$JAVA_DIR" > ~/.config/godot/editor_settings-4.4.tres
+          cat ~/.config/godot/editor_settings-4.4.tres
       - name: Export de l'APK
         run: |
           cd jeu && mkdir -p build
