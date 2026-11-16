@@ -1,6 +1,6 @@
 {
-  "_note": "Toutes les valeurs sont INDICATIVES (FCFA) et modifiables. À remplacer par des devis réels.",
-  "capital_initial": 6000000,
+  "_note": "Toutes les valeurs sont INDICATIVES (FCFA) et modifiables. À remplacer par des devis réels. Les salaires sont des paramètres de jeu : vérifier le SMIG/SMAG et les barèmes en vigueur. La main-d'œuvre de campagne est payée par les salaires des riziculteurs.",
+  "capital_initial": 8000000,
   "foncier": {
     "enquete_coutumiere": 50000,
     "comite_villageois": 75000,
@@ -24,10 +24,42 @@
   "campagne_par_ha": {
     "semences": 30000,
     "engrais": 110000,
-    "main_oeuvre": 220000,
+    "main_oeuvre": 0,
     "protection": 40000,
     "recolte_battage": 90000
   },
   "eau_redevance_m3": 3,
-  "litige": 600000
+  "litige": 600000,
+  "salaires_mensuels": {
+    "manoeuvre": 75000,
+    "macon": 120000,
+    "chef_chantier": 200000,
+    "riziculteur": 80000
+  },
+  "pelle_jour": 150000,
+  "productivite": {
+    "manoeuvre_m3_j": 3.0,
+    "pelle_m3_j": 150.0,
+    "_source": "Ordres de grandeur de terrassement manuel et mécanique, à vérifier (normes HIMO, entreprises locales)."
+  },
+  "pvc_m": {
+    "110": 4000,
+    "160": 8000,
+    "200": 12500,
+    "250": 19000
+  },
+  "barrage_ouvrages": 600000,
+  "energie": {
+    "gasoil_fcfa_l": 725,
+    "conso_l_par_kwh": 0.3,
+    "panneaux_fcfa_wc": 450,
+    "batterie_fcfa_kwh": 200000,
+    "electropompe_base": 400000,
+    "electropompe_par_kw": 150000,
+    "motopompe": 350000,
+    "rendement_pompe": 0.55,
+    "ratio_performance": 0.75,
+    "repas_jour": 1000,
+    "_source": "Gasoil : prix officiel de novembre 2026 (725 FCFA/L). Solaire : kit résidentiel de 3,5 kW annoncé à partir de 1 850 000 FCFA à Abidjan en 2026 (≈ 530 FCFA/W tout compris) ; batterie lithium : ordre de grandeur des prix publics 2026. Pompes, rendement, consommation : valeurs indicatives à remplacer par des devis."
+  }
 }

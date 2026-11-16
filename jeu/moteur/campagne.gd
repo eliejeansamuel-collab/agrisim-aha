@@ -23,6 +23,10 @@ var jour_semis := 121         # jour de l'année du repiquage
 var crue_jour := -1           # jour de campagne où survient une crue (-1 = aucune)
 var crue_hauteur_m := 0.0
 var crue_duree := 0
+# Retenue (petit barrage) : stocke l'eau du marigot non utilisée et la restitue quand il baisse
+var retenue_capacite_m3 := 0.0
+var retenue_m3 := 0.0
+var retenue_surface_m2 := 0.0
 
 # --- État ---
 var jour := 0                 # jour de campagne (1..durée)
@@ -57,10 +61,13 @@ func demarrer() -> void:
 
 ## Apport maximal possible aujourd'hui à la parcelle (mm), limité par le canal ET par la rivière
 func apport_max_mm(jour_annee: int) -> float:
-	var q: float = q_canal_m3_s
-	if q_riviere_m3_s.size() == 12:
-		q = min(q, q_riviere_m3_s[Meteo.mois_du_jour(jour_annee)])
-	return q * 86400.0 * efficience / (surface_ha * 10000.0) * 1000.0
+	var v: float = min(q_canal_m3_s * 86400.0, _volume_riviere_jour(jour_annee) + retenue_m3)
+	return v * efficience / (surface_ha * 10000.0) * 1000.0
+
+func _volume_riviere_jour(jour_annee: int) -> float:
+	if q_riviere_m3_s.size() != 12:
+		return 1.0e12
+	return q_riviere_m3_s[Meteo.mois_du_jour(jour_annee)] * 86400.0
 
 func jour_suivant() -> Dictionary:
 	if termine:
@@ -76,6 +83,14 @@ func jour_suivant() -> Dictionary:
 	if not assec:
 		var demande: float = max(0.0, lame_cible_mm - lame_mm + etm + percolation_mm_j - w.pluie + (ru_mm - stock_mm))
 		irr = min(demande, apport_max_mm(ja))
+	if retenue_capacite_m3 > 0.0:
+		var v_riv: float = _volume_riviere_jour(ja)
+		var besoin_v: float = Eau.mm_vers_m3(irr, surface_ha) / efficience
+		var de_riviere: float = min(besoin_v, v_riv)
+		retenue_m3 -= besoin_v - de_riviere
+		retenue_m3 += v_riv - de_riviere
+		retenue_m3 -= w.et0 / 1000.0 * retenue_surface_m2 * clamp(retenue_m3 / retenue_capacite_m3, 0.0, 1.0)
+		retenue_m3 = clamp(retenue_m3, 0.0, retenue_capacite_m3)
 	lame_mm += w.pluie + irr
 	# Réhumectation du sol
 	var inf: float = min(lame_mm, ru_mm - stock_mm)

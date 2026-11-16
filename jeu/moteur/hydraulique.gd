@@ -92,3 +92,15 @@ static func pression_hydrostatique(h: float) -> float:
 ## Volume de terrassement d'un canal ou d'une digue trapézoïdale (m3)
 static func volume_trapeze(b: float, h: float, m: float, longueur: float) -> float:
 	return section_trapeze(b, h, m) * longueur
+
+## Débit (m3/s) d'une conduite gravitaire qui consomme toute la charge disponible (m), par dichotomie
+static func debit_conduite(d: float, longueur: float, charge_m: float, rugosite: float = 0.00001) -> float:
+	var lo := 0.0
+	var hi := 2.0
+	for i in 60:
+		var mid := (lo + hi) / 2.0
+		if perte_charge_lineaire(mid, d, longueur, rugosite) < charge_m:
+			lo = mid
+		else:
+			hi = mid
+	return (lo + hi) / 2.0

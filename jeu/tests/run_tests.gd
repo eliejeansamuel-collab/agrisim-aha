@@ -134,6 +134,22 @@ func _init() -> void:
 	c3.q_canal_m3_s = 0.012
 	c3.crue_jour = 40; c3.crue_duree = 4; c3.crue_hauteur_m = 0.8; c3.hauteur_digue_m = 1.0
 	egal("crue avec digue suffisante : 0 submersion", c3.simuler_tout().jours_submersion, 0)
+	# Retenue : en saison sèche avec un marigot faible, elle réduit le stress
+	var qsec: Array = [0.002, 0.002, 0.002, 0.002, 0.002, 0.002, 0.002, 0.002, 0.002, 0.002, 0.002, 0.002]
+	var c5 = C.new(riz, M.new(climat, 7))
+	c5.q_canal_m3_s = 0.012; c5.jour_semis = 335; c5.q_riviere_m3_s = qsec
+	var r5: Dictionary = c5.simuler_tout()
+	var c6 = C.new(riz, M.new(climat, 7))
+	c6.q_canal_m3_s = 0.012; c6.jour_semis = 335; c6.q_riviere_m3_s = qsec
+	c6.retenue_capacite_m3 = 22000.0; c6.retenue_m3 = 22000.0; c6.retenue_surface_m2 = 12000.0
+	var r6: Dictionary = c6.simuler_tout()
+	egal("retenue : moins de jours de stress", r6.jours_stress < r5.jours_stress, true)
+	egal("retenue : meilleur rendement", r6.rendement_t_ha > r5.rendement_t_ha, true)
+	proche("retenue : bilan de la parcelle fermé", c6.erreur_bilan(), 0.0, 0.001)
+	egal("retenue : stock jamais négatif", c6.retenue_m3 >= 0.0, true)
+	# Conduite : débit qui consomme exactement la charge disponible
+	var qc: float = H.debit_conduite(0.16, 350.0, 0.85)
+	proche("conduite : pertes de charge = charge disponible", H.perte_charge_lineaire(qc, 0.16, 350.0, 0.00001), 0.85, 0.01)
 	# Même graine => même résultat (reproductibilité)
 	var c4 = C.new(riz, M.new(climat, 7))
 	c4.q_canal_m3_s = 0.012

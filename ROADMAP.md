@@ -1,6 +1,6 @@
 # Feuille de route
 
-Mise à jour : 15 novembre 2026, fin de la troisième session.
+Mise à jour : 15 novembre 2026, fin de la quatrième session.
 
 ## Fait et vérifié
 
@@ -13,6 +13,8 @@ Mise à jour : 15 novembre 2026, fin de la troisième session.
 
 - **Données réelles et hors-ligne (session 3)** : 14 villes de Côte d'Ivoire ; `scenes/donnees_reelles.gd` télécharge le relief (Copernicus GLO-90 via l'API d'altitude Open-Meteo, grille 20 × 20 sur 800 m) et les normales climatiques (NASA POWER, ET0 recalculée par Penman-Monteith), les met en cache (`user://sites/`), les réutilise hors connexion et tente une mise à jour au lancement. Vérifié avec un **serveur factice** (`tests/serveur_factice.py`) : téléchargement, cache, bascule hors ligne.
 - **Monde vivant (session 3)** : course du soleil et de la lune, ciel jour / aube / nuit, nuages qui dérivent et s'épaississent les jours de pluie, pluie, riz qui ondule selon le vent, 10 ouvriers aux champs le jour. Trois vitesses : 1 jour = 5 s, normal, rapide. Les résultats ne dépendent pas de la vitesse (pas de calcul journalier inchangé).
+
+- **Équipe, chantier, énergie (session 4)** : recrutement au village (manœuvres, maçons, chef de chantier, pelle, repas, riziculteurs, salaires mensuels) ; chantier simulé jour par jour par lots avec date butoir de repiquage, pluie qui ralentit, retard qui décale la campagne ; ouvriers autonomes (fatigue, faim, repas, repos, absence si épuisement, ordres collectifs et individuels, gerbes portées à la récolte) ; pompage (HMT, puissance, kWh/m³), part solaire, panneaux, batterie, gasoil ; conduite PVC (Darcy-Weisbach) ; petit barrage et retenue ; vitesses de 1 jour = 2 min à rapide, saut de 1 ou 10 jours ; ajout de budget et budget illimité. 77 tests ; 4 parties automatiques.
 
 ## Fait mais NON vérifié
 
@@ -29,6 +31,13 @@ Mise à jour : 15 novembre 2026, fin de la troisième session.
 - Pluie efficace nulle pour le dimensionnement ; mise en eau non comptée ; irrigation en pilote automatique.
 - Travaux : coût et délai forfaitaires. Vente à prix fixe. Pas de fertilisation, ravageurs, main-d'œuvre, stocks.
 - Sauvegarde : seul le résumé de la dernière partie est écrit ; pas de reprise en cours de partie.
+
+## Limites de la session 4
+
+- Les ouvriers sont des agents à règles (besoins + ordres), pas des modèles d'IA ; pas d'humeur, pas de dialogue.
+- Salaires, rendements de chantier, prix des pompes, panneaux, batteries et PVC : ordres de grandeur ; seul le gasoil (725 FCFA/L, novembre 2026) vient d'un prix officiel.
+- Barrage : pas de calcul de crue de projet ni de déversoir en jeu ; retenue à géométrie fixe.
+- Graphismes : formes géométriques. Un rendu proche d'un jeu commercial demande des modèles 3D, textures et animations faits par des artistes ou des packs de ressources.
 
 ## À faire, par priorité
 

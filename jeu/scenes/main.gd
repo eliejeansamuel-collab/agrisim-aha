@@ -3,7 +3,7 @@ extends Node3D
 ## Foncier -> études -> besoins en eau -> conception -> campagne -> bilan et débriefing.
 ## Toute la scène est construite par code ; les règles de calcul sont dans res://moteur.
 
-enum Etape { INTRO, FONCIER, ETUDES, BESOINS, CONCEPTION, CAMPAGNE, BILAN }
+enum Etape { INTRO, FONCIER, ETUDES, BESOINS, CONCEPTION, RECRUTEMENT, TRAVAUX, CAMPAGNE, BILAN }
 
 # Réalité du terrain, inconnue du joueur tant qu'il n'a pas fait les études
 var VRAI := {}
@@ -65,7 +65,29 @@ var diguette_h := 0.20
 var avec_drain := false
 var digue_h := 0.0
 var campagne: Campagne
-var vitesse := 2.0            # jours simulés par seconde
+var vitesse := 1.0 / 30.0     # jours simulés par seconde (par défaut : 1 jour = 30 s)
+var adduction := "canal"      # canal en terre | conduite pvc
+var pvc_dn := 160
+var barrage_h := 0.0          # hauteur du petit barrage (0 = aucun)
+var source_eau := "gravite"   # gravite | pompe
+var pompe_q := 8.0            # L/s
+var part_solaire := 0.0       # % de l'énergie de pompage couverte par le solaire
+var batterie_kwh := 0.0
+var equipe := {"manoeuvres": 12, "macons": 2, "chef": true, "pelle": false, "riziculteurs": 5}
+var repas := true
+var lots: Array = []
+var groupes := {}
+var chantier := {"jour": 0, "debut": 0, "fini": false, "salaires": 0.0}
+var chantier_meteo: Meteo
+var pluie_forte := false
+var retard_j := 0
+var salaires_campagne := 0.0
+var carburant_fcfa := 0.0
+var energie_kwh := {"solaire": 0.0, "thermique": 0.0}
+var preleve_veille := 0.0
+var heures_rizi := 0.0
+var budget_illimite := false
+const FENETRE_CHANTIER := 75  # jours disponibles entre l'ouverture du chantier et le repiquage prévu
 var en_pause := false
 var cumul_temps := 0.0
 var evenements: Array = []
@@ -339,36 +361,83 @@ func _poser_bornes() -> void:
 			n += 1
 
 
+func _groupe(id: String) -> Node3D:
+	var g := Node3D.new()
+	amenagement.add_child(g)
+	groupes[id] = g
+	return g
+
+
+## Construit tous les ouvrages (rangés par lot de travaux) sur le relief courant
 func _construire_amenagement() -> void:
 	for c in amenagement.get_children():
+		amenagement.remove_child(c)
 		c.queue_free()
-	Terrain.casiers_niveles = true
-	_reconstruire_terrain()
+	groupes = {}
 	var pr := Terrain.PARCELLE
 	var terre := Color(0.52, 0.38, 0.24)
 	# Diguettes : 4 colonnes x 5 rangées de casiers de 50 m
+	var g := _groupe("diguettes")
 	for i in 5:
 		var x := pr.position.x + i * 50.0
 		for j in 5:
 			var zc := pr.position.y + j * 50.0 + 25.0
-			_boite(amenagement, Vector3(1.4, diguette_h * 3.0 + 0.4, 50), Vector3(x, Terrain.hauteur(x + 1.0 if i < 4 else x - 1.0, zc) + diguette_h, zc), terre)
+			_boite(g, Vector3(1.4, diguette_h * 3.0 + 0.4, 50), Vector3(x, Terrain.hauteur(x + 1.0 if i < 4 else x - 1.0, zc) + diguette_h, zc), terre)
 	for j in 6:
 		var z := pr.position.y + j * 50.0
 		for i in 4:
 			var xc := pr.position.x + i * 50.0 + 25.0
-			_boite(amenagement, Vector3(50, diguette_h * 3.0 + 0.4, 1.4), Vector3(xc, Terrain.hauteur(xc, z + 1.0 if j < 5 else z - 1.0) + diguette_h, z), terre)
-	# Canal d'amenée depuis la prise sur le marigot (amont), puis canal de tête
+			_boite(g, Vector3(50, diguette_h * 3.0 + 0.4, 1.4), Vector3(xc, Terrain.hauteur(xc, z + 1.0 if j < 5 else z - 1.0) + diguette_h, z), terre)
+	# Prise sur le marigot
 	var prise := Vector3(Terrain.x_riviere(-330.0) + 6.0, 0, -330.0)
 	var tete := Vector3(pr.position.x + 4.0, 0, pr.position.y - 8.0)
-	_troncon_canal(prise, tete)
-	_troncon_canal(tete, Vector3(pr.end.x, 0, pr.position.y - 8.0))
-	_boite(amenagement, Vector3(5, 4, 5), Vector3(prise.x, Terrain.hauteur(prise.x, prise.z) + 1.5, prise.z), Color(0.65, 0.65, 0.65))
-	# Digue de protection côté marigot
+	g = _groupe("prise")
+	_boite(g, Vector3(5, 4, 5), Vector3(prise.x, Terrain.hauteur(prise.x, prise.z) + 1.5, prise.z), Color(0.65, 0.65, 0.65))
+	# Canal d'amenée ou conduite, puis canal de tête
+	g = _groupe("canal")
+	_troncon_canal(g, prise, tete)
+	_troncon_canal(g, tete, Vector3(pr.end.x, 0, pr.position.y - 8.0))
+	# Digue de protection côté marigot (par tronçons)
 	if digue_h > 0.05:
-		_boite(amenagement, Vector3(2.0 + digue_h * 4.0, digue_h * 2.0, L_DIGUE + 20), Vector3(pr.position.x - 10.0, Terrain.hauteur(pr.position.x - 10.0, 0) + digue_h, 0), Color(0.45, 0.33, 0.20))
+		g = _groupe("digue")
+		for k in 10:
+			var zd: float = pr.position.y - 10.0 + (k + 0.5) * (L_DIGUE + 20.0) / 10.0
+			_boite(g, Vector3(2.0 + digue_h * 4.0, digue_h * 2.0, (L_DIGUE + 20.0) / 10.0 + 0.3), Vector3(pr.position.x - 10.0, Terrain.hauteur(pr.position.x - 10.0, zd) + digue_h, zd), Color(0.45, 0.33, 0.20))
 	# Drain collecteur à l'aval
 	if avec_drain:
-		_boite(amenagement, Vector3(pr.size.x + 40, 0.3, 3.0), Vector3(pr.get_center().x + 10, Terrain.hauteur(pr.get_center().x, pr.end.y + 9.0) + 0.1, pr.end.y + 9.0), Color(0.15, 0.30, 0.42))
+		g = _groupe("drain")
+		for k in 8:
+			var xd: float = pr.position.x - 10.0 + (k + 0.5) * (pr.size.x + 40.0) / 8.0
+			_boite(g, Vector3((pr.size.x + 40.0) / 8.0 + 0.3, 0.3, 3.0), Vector3(xd, Terrain.hauteur(xd, pr.end.y + 9.0) + 0.1, pr.end.y + 9.0), Color(0.15, 0.30, 0.42))
+	# Petit barrage en terre et sa retenue, à l'amont
+	if barrage_h > 0.0:
+		g = _groupe("barrage")
+		var xb: float = Terrain.x_riviere(-378.0)
+		var yb: float = Terrain.hauteur(xb + 20.0, -378.0)
+		for k in 8:
+			_boite(g, Vector3(70.0 / 8.0 + 0.2, barrage_h * 3.0, Hydrologie.crete_knappen(barrage_h) + barrage_h * 3.0), Vector3(xb - 35.0 + (k + 0.5) * 70.0 / 8.0, yb + barrage_h * 0.5, -378.0), Color(0.48, 0.36, 0.22))
+		var lac := MeshInstance3D.new()
+		var pl := PlaneMesh.new()
+		pl.size = Vector2(80, 22)
+		lac.mesh = pl
+		lac.material_override = _mat(Color(0.20, 0.45, 0.65, 0.85), true)
+		lac.position = Vector3(xb, yb + barrage_h * 0.9, -391.0)
+		g.add_child(lac)
+	# Station de pompage, champ solaire, local batterie, câble
+	if source_eau == "pompe":
+		g = _groupe("energie")
+		var ys: float = Terrain.hauteur(prise.x + 14.0, -322.0)
+		_boite(g, Vector3(4, 3, 3), Vector3(prise.x + 8.0, ys + 1.5, -326.0), Color(0.85, 0.35, 0.15))          # pompe
+		if batterie_kwh > 0.0:
+			_boite(g, Vector3(5, 4, 5), Vector3(prise.x + 16.0, ys + 2.0, -326.0), Color(0.90, 0.90, 0.85))      # local batterie
+		if part_solaire > 1.0:
+			var n_p: int = int(ceil(_kwc() * 1000.0 / 550.0))
+			_boite(g, Vector3(0.4, 0.4, 16), Vector3(prise.x + 12.0, ys + 0.3, -316.0), Color(0.1, 0.1, 0.1))    # câble
+			for k in n_p:
+				var px: float = prise.x + 12.0 + (k % 6) * 5.2
+				var pz: float = -306.0 + (k / 6) * 7.0
+				var pan := _boite(g, Vector3(4.6, 0.25, 5.6), Vector3(px, Terrain.hauteur(px, pz) + 2.2, pz), Color(0.08, 0.12, 0.35))
+				pan.rotation.x = deg_to_rad(12.0)
 	# Lames d'eau des casiers et touffes de riz
 	var plan := PlaneMesh.new()
 	plan.size = Vector2(48.4, 48.4)
@@ -381,8 +450,12 @@ func _construire_amenagement() -> void:
 	eau_mat = _mat(Color(0.25, 0.50, 0.70, 0.75), true)
 	eau_mm.material_override = eau_mat
 	amenagement.add_child(eau_mm)
-	var touffe := BoxMesh.new()
-	touffe.size = Vector3(1.5, 1.0, 1.5)
+	var touffe := CylinderMesh.new()      # touffe de riz : gerbe évasée
+	touffe.top_radius = 1.0
+	touffe.bottom_radius = 0.25
+	touffe.height = 1.0
+	touffe.radial_segments = 5
+	touffe.rings = 1
 	var mr := MultiMesh.new()
 	mr.transform_format = MultiMesh.TRANSFORM_3D
 	mr.mesh = touffe
@@ -396,15 +469,20 @@ func _construire_amenagement() -> void:
 	_maj_parcelle(0.0, 0.0, 0.0)
 
 
-func _troncon_canal(a: Vector3, b: Vector3) -> void:
+func _troncon_canal(parent: Node3D, a: Vector3, b: Vector3) -> void:
 	var n: int = int(ceil(a.distance_to(b) / 12.0))
 	var angle: float = atan2(b.x - a.x, b.z - a.z)
 	for i in n:
 		var p: Vector3 = a.lerp(b, (i + 0.5) / n)
 		var y := Terrain.hauteur(p.x, p.z)
-		var larg: float = canal_b + 2.0 * canal_h + 1.5
-		_boite(amenagement, Vector3(larg + 2.0, 0.9, a.distance_to(b) / n + 0.5), Vector3(p.x, y + 0.25, p.z), Color(0.52, 0.38, 0.24), angle)
-		_boite(amenagement, Vector3(larg, 0.3, a.distance_to(b) / n + 0.5), Vector3(p.x, y + 0.62, p.z), Color(0.22, 0.48, 0.68), angle)
+		var seg := Node3D.new()
+		parent.add_child(seg)
+		if adduction == "pvc":
+			_boite(seg, Vector3(pvc_dn / 1000.0 * 6.0, pvc_dn / 1000.0 * 6.0, a.distance_to(b) / n + 0.5), Vector3(p.x, y + 0.5, p.z), Color(0.35, 0.40, 0.48), angle)
+		else:
+			var larg: float = canal_b + 2.0 * canal_h + 1.5
+			_boite(seg, Vector3(larg + 2.0, 0.9, a.distance_to(b) / n + 0.5), Vector3(p.x, y + 0.25, p.z), Color(0.52, 0.38, 0.24), angle)
+			_boite(seg, Vector3(larg, 0.3, a.distance_to(b) / n + 0.5), Vector3(p.x, y + 0.62, p.z), Color(0.22, 0.48, 0.68), angle)
 
 
 ## Met à jour l'eau des casiers (lame en mm) et la croissance du riz (0..1) et sa maturité (0..1)
@@ -443,8 +521,9 @@ func _process(delta: float) -> void:
 	var dir := Vector3(sin(cam_yaw) * cos(cam_pitch), sin(cam_pitch), cos(cam_yaw) * cos(cam_pitch))
 	cam.position = cam_cible + dir * cam_dist
 	cam.look_at(cam_cible)
-	# Heure du jour : pendant la campagne elle suit le temps simulé ; sinon elle s'écoule doucement
-	if etape == Etape.CAMPAGNE and campagne != null and not campagne.termine:
+	# Horloge : pendant le chantier et la campagne, l'heure suit le temps simulé ; sinon elle s'écoule doucement
+	var en_cours: bool = (etape == Etape.TRAVAUX and not chantier.fini) or (etape == Etape.CAMPAGNE and campagne != null and not campagne.termine)
+	if en_cours:
 		monde.heure = fmod(6.0 + cumul_temps * 24.0, 24.0)
 		monde.ouvriers_actifs = true
 	else:
@@ -455,11 +534,74 @@ func _process(delta: float) -> void:
 	if OS.get_environment("AGRISIM_HEURE") != "":
 		monde.heure = float(OS.get_environment("AGRISIM_HEURE"))
 	monde.maj(delta, cam_cible)
-	if etape == Etape.CAMPAGNE and campagne != null and not en_pause and not campagne.termine and not popup.visible:
-		cumul_temps += delta * vitesse
-		while cumul_temps >= 1.0 and not campagne.termine and not popup.visible:
+	if en_cours and not en_pause and not popup.visible:
+		var dj: float = delta * vitesse
+		monde.simuler_agents(dj * 24.0, pluie_forte)
+		cumul_temps += dj
+		while cumul_temps >= 1.0 and not popup.visible:
 			cumul_temps -= 1.0
-			_jour_de_campagne()
+			if not _avancer_un_jour():
+				break
+
+
+## Fait passer un jour (chantier ou campagne). Renvoie faux quand il n'y a plus rien à simuler.
+func _avancer_un_jour() -> bool:
+	if etape == Etape.TRAVAUX and not chantier.fini:
+		_jour_de_travaux()
+		return true
+	if etape == Etape.CAMPAGNE and campagne != null and not campagne.termine:
+		_jour_de_campagne()
+		return true
+	return false
+
+
+func _passer_jours(n: int) -> void:
+	for k in n:
+		if popup.visible:
+			break
+		monde.simuler_agents(24.0, pluie_forte)
+		if not _avancer_un_jour():
+			break
+
+
+func _barre_temps() -> void:
+	var ligne := HBoxContainer.new()
+	panneau.add_child(ligne)
+	for v in [["Pause", 0.0], ["1 j = 2 min", 1.0 / 120.0], ["1 j = 30 s", 1.0 / 30.0], ["1 j = 5 s", 0.2], ["Rapide", 4.0]]:
+		var b := Button.new()
+		b.text = v[0]
+		b.custom_minimum_size = Vector2(0, 46)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.add_theme_font_size_override("font_size", 14)
+		var vv: float = v[1]
+		b.pressed.connect(func():
+			en_pause = vv == 0.0
+			if vv > 0.0:
+				vitesse = vv)
+		ligne.add_child(b)
+	var l2 := HBoxContainer.new()
+	panneau.add_child(l2)
+	for v in [["Passer 1 jour", 1], ["Passer 10 jours", 10]]:
+		var b := Button.new()
+		b.text = v[0]
+		b.custom_minimum_size = Vector2(0, 44)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var nn: int = v[1]
+		b.pressed.connect(func(): _passer_jours(nn))
+		l2.add_child(b)
+	var l3 := HBoxContainer.new()
+	panneau.add_child(l3)
+	for v in [["Travail normal", "auto"], ["Tous à table", "manger"], ["Repos", "repos"], ["Forcer", "forcer"]]:
+		var b := Button.new()
+		b.text = v[0]
+		b.custom_minimum_size = Vector2(0, 44)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.add_theme_font_size_override("font_size", 14)
+		var oo: String = v[1]
+		b.pressed.connect(func():
+			monde.ordre_a_tous(oo)
+			info.text = "Ordre donné à toute l'équipe : %s. Touche un ouvrier pour lui parler." % v[0].to_lower())
+		l3.add_child(b)
 
 
 func _unhandled_input(ev: InputEvent) -> void:
@@ -501,6 +643,11 @@ func _toucher_terrain(pos_ecran: Vector2) -> void:
 	if p == null:
 		return
 	var cible: Vector3 = p
+	if monde.ouvriers_actifs:
+		var ia: int = monde.agent_proche(cible)
+		if ia >= 0:
+			_fiche_ouvrier(ia)
+			return
 	var tw := create_tween()
 	tw.tween_property(avatar, "position", cible, clamp(avatar.position.distance_to(cible) / 120.0, 0.3, 2.5))
 	tw.parallel().tween_property(self, "cam_cible", cible, 0.8)
@@ -515,6 +662,17 @@ func _toucher_terrain(pos_ecran: Vector2) -> void:
 # =====================================================================
 #  INTERFACE
 # =====================================================================
+
+func _fiche_ouvrier(i: int) -> void:
+	var a: Dictionary = monde.agents[i]
+	var etats := {"travaille": "au travail", "mange": "en train de manger", "repos": "se repose", "dort": "dort", "absent": "absent aujourd'hui"}
+	var avis := "En forme."
+	if a.fatigue > 80.0: avis = "« Patron, je n'en peux plus. »"
+	elif a.faim > 75.0: avis = "« J'ai faim, on mange quand ? »"
+	elif a.fatigue > 55.0: avis = "« Ça commence à tirer. »"
+	var bb := "[b][font_size=26]%s[/font_size][/b] — %s\n\nEn ce moment : [b]%s[/b]\nFatigue : [b]%d %%[/b] · Faim : [b]%d %%[/b]\nConsigne : %s\n\n%s\n\n[i]Chaque ouvrier décide seul de manger ou de se reposer selon ses besoins, sauf si tu lui donnes un ordre. Un ouvrier épuisé ne vient pas le lendemain.[/i]" % [a.nom, a.role, etats[a.etat], int(a.fatigue), int(a.faim), {"auto": "il s'organise seul", "manger": "aller manger", "repos": "se reposer", "forcer": "ne pas s'arrêter"}[a.ordre], avis]
+	_afficher_popup(bb, [["Repose-toi", func(): a.ordre = "repos"], ["Va manger", func(): a.ordre = "manger"], ["Au travail", func(): a.ordre = "auto"], ["Fermer", Callable()]])
+
 
 func _creer_interface() -> void:
 	var couche := CanvasLayer.new()
@@ -602,6 +760,7 @@ func _creer_interface() -> void:
 	pc.add_child(popup_texte)
 	popup_boutons = HBoxContainer.new()
 	popup_boutons.alignment = BoxContainer.ALIGNMENT_END
+	popup_boutons.add_theme_constant_override("separation", 8)
 	pc.add_child(popup_boutons)
 
 
@@ -655,7 +814,7 @@ func _afficher_popup(bb: String, boutons: Array) -> void:
 	for b in boutons:
 		var btn := Button.new()
 		btn.text = b[0]
-		btn.custom_minimum_size = Vector2(160, 52)
+		btn.custom_minimum_size = Vector2(130, 52)
 		var action: Callable = b[1]
 		btn.pressed.connect(func():
 			popup.visible = false
@@ -675,7 +834,7 @@ func _fcfa(v: float) -> String:
 
 
 func _maj_hud() -> void:
-	var noms := ["Arrivée", "1. Foncier", "2. Études", "3. Besoins en eau", "4. Conception", "5. Campagne", "6. Bilan"]
+	var noms := ["Arrivée", "1. Foncier", "2. Études", "3. Besoins en eau", "4. Conception", "5. Équipe", "6. Chantier", "7. Campagne", "8. Bilan"]
 	hud.text = "%s   |   Trésorerie : %s   |   Jour %d du projet" % [noms[etape], _fcfa(tresorerie), jours_ecoules]
 
 
@@ -708,7 +867,15 @@ func _ouvrir_comptes() -> void:
 	for c in charges:
 		bb += "[cell]%s   [/cell][cell]%s[/cell]" % [c[0], _fcfa(-c[1])]
 	bb += "[/table]\n\n[b]Trésorerie : %s[/b]\n[i]Tous les coûts sont des valeurs indicatives, modifiables dans donnees/couts.json.[/i]" % _fcfa(tresorerie)
-	_afficher_popup(bb, [["Fermer", Callable()]])
+	_afficher_popup(bb, [["Ajouter 5 000 000 FCFA", func():
+			tresorerie += 5000000.0
+			charges.append(["Apport au budget", -5000000.0, "apport"])
+			_maj_hud()
+			_ouvrir_comptes()],
+		["Budget illimité : %s" % ("OUI" if budget_illimite else "non"), func():
+			budget_illimite = not budget_illimite
+			_ouvrir_comptes()],
+		["Fermer", Callable()]])
 
 
 # =====================================================================
@@ -725,6 +892,15 @@ func _nouvelle_partie() -> void:
 	quiz_juste = false
 	motopompe = false
 	litige_jours_restants = 0
+	retard_j = 0
+	lots = []
+	groupes = {}
+	chantier = {"jour": 0, "debut": 0, "fini": false, "salaires": 0.0}
+	barrage_h = 0.0
+	source_eau = "gravite"
+	adduction = "canal"
+	part_solaire = 0.0
+	batterie_kwh = 0.0
 	campagne = null
 	avec_drain = false
 	digue_h = 0.0
@@ -749,6 +925,8 @@ func _aller(e: int) -> void:
 		Etape.ETUDES: _ecran_etudes()
 		Etape.BESOINS: _ecran_besoins()
 		Etape.CONCEPTION: _ecran_conception()
+		Etape.RECRUTEMENT: _ecran_recrutement()
+		Etape.TRAVAUX: _demarrer_travaux()
 		Etape.CAMPAGNE: _demarrer_campagne()
 		Etape.BILAN: _ecran_bilan()
 
@@ -1026,24 +1204,128 @@ func _calcul_besoins(et0: float, perc: float) -> String:
 	return "[b]Voir le calcul[/b]\n1. ETc = Kc × ET0 = %.2f × %.1f = [b]%.2f mm/j[/b]\n2. Besoin net de la rizière = ETc + percolation − pluie efficace = %.2f + %.0f − 0 = [b]%.2f mm/j[/b]\n3. Besoin brut = besoin net ÷ efficience = %.2f ÷ %.2f = [b]%.2f mm/j[/b]\n4. Débit fictif continu = besoin brut × 10 000 ÷ 86 400 = [b]%.2f L/s/ha[/b]\n5. Débit de projet = %.2f × 5 ha = [b]%.1f L/s[/b]\n\n[color=#1F4E79][i]Dans ton cours : L3 — Bases techniques et pilotage de projet d'irrigation, ch. 1 (Qfc) et ch. 4 (ETc, besoin net et brut).\nSimplification du jeu : pluie efficace prise à 0 (poche de sécheresse) ; la mise en eau initiale n'est pas comptée.[/i][/color]" % [riz.kc_mid, et0, etc_v, etc_v, perc, net, net, EFFICIENCE, brut, qfc, qfc, qfc * 5.0]
 
 
+func _efficience() -> float:
+	var e: float = 0.72 if adduction == "pvc" else EFFICIENCE
+	return e - (0.0 if equipe.chef else 0.06)   # sans chef de chantier : malfaçons, fuites
+
+
+## Débit que l'adduction peut amener à la parcelle (m3/s)
 func _capacite_canal(pente: float) -> float:
+	if source_eau == "pompe":
+		return pompe_q / 1000.0
+	if adduction == "pvc":
+		return Hydraulique.debit_conduite(pvc_dn / 1000.0, L_CANAL, pente * L_CANAL + 0.5)
 	return Hydraulique.debit_manning(KS_TERRE, canal_b, max(canal_h - REVANCHE, 0.0), FRUIT, pente)
 
 
+# --- Pompage ---
+func _hmt() -> float:
+	var q: float = pompe_q / 1000.0
+	var pdc: float = Hydraulique.perte_charge_lineaire(q, pvc_dn / 1000.0, L_CANAL, 0.00001) if adduction == "pvc" else 1.0
+	return Hydraulique.hmt(4.0, pdc)
+
+func _puissance_pompe() -> float:
+	return Hydraulique.puissance_pompe_kw(pompe_q / 1000.0, _hmt(), couts.energie.rendement_pompe)
+
+func _kwh_par_m3() -> float:
+	return _puissance_pompe() / (pompe_q / 1000.0 * 3600.0)
+
+func _ensoleillement(mois: int) -> float:   # kWh/m2/jour
+	var r: Array = climat.get("rayonnement_mj", [])
+	return float(r[mois]) / 3.6 if r.size() == 12 else 4.8
+
+func _kwc() -> float:
+	var e_jour: float = q_projet * 86400.0 * _kwh_par_m3()
+	return part_solaire / 100.0 * e_jour / (4.8 * float(couts.energie.ratio_performance))
+
+func _heures_pompage() -> float:
+	if part_solaire < 99.0:
+		return 24.0                      # le moteur thermique tourne quand il faut
+	return clamp(8.0 + batterie_kwh / max(_puissance_pompe(), 0.01), 8.0, 24.0)
+
+
+func _volume_barrage() -> float:
+	return barrage_h * (Hydrologie.crete_knappen(barrage_h) + 2.25 * barrage_h) * 80.0
+
+func _capacite_retenue() -> float:
+	return Hydrologie.volume_retenue(150.0, 80.0, barrage_h)
+
+
+## Achats de matériel et de matériaux (la main-d'œuvre est payée au temps passé, pendant le chantier)
 func _cout_travaux() -> Dictionary:
 	var t: Dictionary = couts.travaux
-	var v_canal: float = Hydraulique.volume_trapeze(canal_b, canal_h, FRUIT, L_CANAL)
-	var v_diguettes: float = Hydraulique.volume_trapeze(0.3, diguette_h, 1.0, L_DIGUETTES)
-	var v_digue: float = Hydraulique.volume_trapeze(1.0, digue_h, 2.0, L_DIGUE)
-	var d := {"Canal d'amenée (%.0f m³)" % v_canal: v_canal * t.terrassement_m3,
-		"Ouvrage de prise": float(t.ouvrage_prise),
-		"Diguettes (%.0f m³)" % v_diguettes: v_diguettes * t.terrassement_m3,
-		"Planage des casiers (%.0f m³)" % _volume_planage(): _volume_planage() * t.planage_m3}
-	if digue_h > 0.05:
-		d["Digue de protection (%.0f m³)" % v_digue] = v_digue * t.terrassement_m3
+	var e: Dictionary = couts.energie
+	var d := {"Ouvrage de prise (ciment, vannes)": float(t.ouvrage_prise)}
+	if adduction == "pvc":
+		d["Conduite PVC DN %d, %.0f m" % [pvc_dn, L_CANAL]] = L_CANAL * float(couts.pvc_m[str(pvc_dn)])
 	if avec_drain:
-		d["Drain collecteur (%.0f m)" % L_DRAIN] = L_DRAIN * t.drain_ml
+		d["Buses et ouvrages du drain"] = L_DRAIN * 300.0
+	if barrage_h > 0.0:
+		d["Déversoir et vidange du barrage"] = float(couts.barrage_ouvrages)
+	if source_eau == "pompe":
+		if part_solaire > 1.0:
+			d["Électropompe %.1f kW" % _puissance_pompe()] = float(e.electropompe_base) + _puissance_pompe() * float(e.electropompe_par_kw)
+			d["Panneaux solaires %.1f kWc (posés)" % _kwc()] = _kwc() * 1000.0 * float(e.panneaux_fcfa_wc)
+		if part_solaire < 99.0:
+			d["Motopompe diesel"] = float(e.motopompe)
+		if batterie_kwh > 0.0:
+			d["Batterie lithium %.0f kWh" % batterie_kwh] = batterie_kwh * float(e.batterie_fcfa_kwh)
 	return d
+
+
+## Lots de travaux : volume (m3 ou jours de maçon), rôle, zone où l'on voit les ouvriers
+func _creer_lots() -> Array:
+	var pr := Terrain.PARCELLE
+	var xr: float = Terrain.x_riviere(-330.0)
+	var l: Array = []
+	l.append({"id": "prise", "nom": "Ouvrage de prise", "total": 20.0, "role": "maçon", "pelle": false, "zone": Rect2(xr, -338, 14, 12)})
+	if barrage_h > 0.0:
+		l.append({"id": "barrage", "nom": "Barrage en terre (%.1f m)" % barrage_h, "total": _volume_barrage(), "role": "manœuvre", "pelle": true, "zone": Rect2(xr - 35, -385, 70, 16)})
+	l.append({"id": "planage", "nom": "Planage des casiers", "total": _volume_planage(), "role": "manœuvre", "pelle": true, "zone": pr})
+	l.append({"id": "diguettes", "nom": "Diguettes", "total": Hydraulique.volume_trapeze(0.3, diguette_h, 1.0, L_DIGUETTES), "role": "manœuvre", "pelle": false, "zone": pr})
+	if adduction == "pvc":
+		l.append({"id": "canal", "nom": "Tranchée et pose de la conduite", "total": L_CANAL * 0.45, "role": "manœuvre", "pelle": false, "zone": Rect2(xr + 5, -330, 35, 200)})
+	else:
+		l.append({"id": "canal", "nom": "Canal d'amenée", "total": Hydraulique.volume_trapeze(canal_b, canal_h, FRUIT, L_CANAL), "role": "manœuvre", "pelle": false, "zone": Rect2(xr + 5, -330, 35, 200)})
+	if digue_h > 0.05:
+		l.append({"id": "digue", "nom": "Digue de protection", "total": Hydraulique.volume_trapeze(1.0, digue_h, 2.0, L_DIGUE), "role": "manœuvre", "pelle": true, "zone": Rect2(pr.position.x - 16, pr.position.y, 12, pr.size.y)})
+	if avec_drain:
+		l.append({"id": "drain", "nom": "Drain collecteur", "total": L_DRAIN * 0.5, "role": "manœuvre", "pelle": false, "zone": Rect2(pr.position.x, pr.end.y + 4, pr.size.x, 10)})
+	if source_eau == "pompe":
+		l.append({"id": "energie", "nom": "Station de pompage" + (" et champ solaire" if part_solaire > 1.0 else ""), "total": 6.0 + _kwc() * 1.5, "role": "maçon", "pelle": false, "zone": Rect2(xr + 10, -322, 40, 26)})
+	for x in l:
+		x["fait"] = 0.0
+	return l
+
+
+func _volume_manoeuvres(liste: Array) -> float:
+	var v := 0.0
+	for x in liste:
+		if x.role == "manœuvre":
+			v += x.total
+	return v
+
+
+func _salaires_chantier_jour() -> float:
+	var sm: Dictionary = couts.salaires_mensuels
+	var n: int = int(equipe.manoeuvres) + int(equipe.macons)
+	return (equipe.manoeuvres * sm.manoeuvre + equipe.macons * sm.macon + (sm.chef_chantier if equipe.chef else 0.0)) / 30.0 \
+		+ (float(couts.pelle_jour) if equipe.pelle else 0.0) + (n * float(couts.energie.repas_jour) if repas else 0.0)
+
+
+## Durée prévisionnelle du chantier (jours), sans pluie ni fatigue : volume ÷ (effectif × rendement)
+func _duree_prevue() -> float:
+	var l := _creer_lots()
+	var pm: float = equipe.manoeuvres * float(couts.productivite.manoeuvre_m3_j) * (1.2 if equipe.chef else 1.0)
+	var v_pelle := 0.0
+	var v_main := 0.0
+	var j_macon := 0.0
+	for x in l:
+		if x.role == "maçon": j_macon += x.total
+		elif x.pelle and equipe.pelle: v_pelle += x.total
+		else: v_main += x.total
+	var j_terre: float = v_main / max(pm, 0.1) + (v_pelle / (float(couts.productivite.pelle_m3_j) + pm) if equipe.pelle else 0.0)
+	return max(j_terre, j_macon / max(float(equipe.macons), 1.0))
 
 
 func _ecran_conception() -> void:
@@ -1053,15 +1335,50 @@ func _ecran_conception() -> void:
 	titre.text = "4. Conception des ouvrages"
 	var pente := _pente_connue()
 	var q := _capacite_canal(pente)
-	var h_eau: float = max(canal_h - REVANCHE, 0.0)
-	var v: float = q / max(Hydraulique.section_trapeze(canal_b, h_eau, FRUIT), 0.0001)
 	var etat := "[color=#8fd18f]suffisant[/color]" if q >= q_projet else "[color=#ff7b7b]insuffisant[/color]"
 	if q > q_projet * 2.5:
 		etat = "[color=#ffb347]très surdimensionné (argent gaspillé)[/color]"
 	var src_pente := "mesurée" if fait.has("topo") else "[color=#ffb347]estimée à l'œil[/color]"
-	_texte("[b]Canal d'amenée en terre[/b] (trapèze, fruit 1/1, Ks = 30)\nPente %s : %.1f ‰ · revanche %.0f cm\nHauteur d'eau = %.2f m → capacité [b]%.1f L/s[/b] pour un débit de projet de %.1f L/s : %s\nVitesse : %.2f m/s%s" % [src_pente, pente * 1000.0, REVANCHE * 100.0, h_eau, q * 1000.0, q_projet * 1000.0, etat, v, "  [color=#ffb347](> 0,8 m/s : risque d'érosion en terre)[/color]" if v > 0.8 else ""])
-	_curseur("Largeur au plafond : %.2f m" % canal_b, 0.2, 2.0, 0.05, canal_b, func(x): canal_b = x; _ecran_conception())
-	_curseur("Profondeur totale du canal : %.2f m" % canal_h, 0.2, 1.0, 0.05, canal_h, func(x): canal_h = x; _ecran_conception())
+	_texte("[b]Débit de projet : %.1f L/s[/b] — ton système amène [b]%.1f L/s[/b] : %s" % [q_projet * 1000.0, q * 1000.0, etat])
+	# --- Source d'eau ---
+	_bouton("Alimentation : %s" % ("POMPAGE dans le marigot" if source_eau == "pompe" else "GRAVITAIRE (prise + pente naturelle)"), func():
+		source_eau = "gravite" if source_eau == "pompe" else "pompe"
+		_ecran_conception())
+	if source_eau == "pompe":
+		_vu("pompage")
+		_curseur("Débit de la pompe : %.1f L/s" % pompe_q, 2.0, 40.0, 0.5, pompe_q, func(x): pompe_q = x; _ecran_conception())
+		_texte("HMT = 4,0 m de relevage + pertes de charge = [b]%.1f m[/b]\nPuissance absorbée = ρ·g·Q·HMT ÷ rendement = [b]%.2f kW[/b]\nÉnergie : %.3f kWh par m³ pompé" % [_hmt(), _puissance_pompe(), _kwh_par_m3()])
+		_curseur("Part de l'énergie fournie par le solaire : %.0f %%" % part_solaire, 0, 100, 10, part_solaire, func(x): part_solaire = x; _ecran_conception())
+		if part_solaire > 1.0:
+			_vu("solaire")
+			_texte("Champ solaire nécessaire : [b]%.1f kWc[/b] (≈ %d panneaux de 550 Wc), soit %s\nHeures de pompage possibles par jour : [b]%.0f h[/b]%s" % [_kwc(), int(ceil(_kwc() * 1000.0 / 550.0)), _fcfa(_kwc() * 1000.0 * float(couts.energie.panneaux_fcfa_wc)), _heures_pompage(), "" if part_solaire < 99.0 else " (100 % solaire : au fil du soleil, sauf batterie)"])
+			_curseur("Batterie : %.0f kWh (%s)" % [batterie_kwh, _fcfa(batterie_kwh * float(couts.energie.batterie_fcfa_kwh))], 0, 30, 1, batterie_kwh, func(x): batterie_kwh = x; _ecran_conception())
+		if part_solaire < 99.0:
+			_texte("Gasoil : %d FCFA/L, environ %.1f L par jour de pointe pour la part thermique." % [int(couts.energie.gasoil_fcfa_l), (1.0 - part_solaire / 100.0) * q_projet * 86400.0 * _kwh_par_m3() * float(couts.energie.conso_l_par_kwh)])
+	# --- Transport ---
+	_bouton("Transport de l'eau : %s" % ("CONDUITE PVC enterrée (peu de pertes)" if adduction == "pvc" else "CANAL EN TERRE (pertes par infiltration)"), func():
+		adduction = "canal" if adduction == "pvc" else "pvc"
+		_ecran_conception())
+	if adduction == "pvc":
+		_vu("conduite")
+		_bouton("Diamètre : DN %d — %s le mètre" % [pvc_dn, _fcfa(float(couts.pvc_m[str(pvc_dn)]))], func():
+			pvc_dn = int(_suivant([110, 160, 200, 250], pvc_dn))
+			_ecran_conception())
+		if source_eau != "pompe":
+			_texte("Charge disponible : pente %s %.1f ‰ × %.0f m + 0,5 m. Le débit est celui qui consomme toute cette charge en pertes de charge (Darcy-Weisbach)." % [src_pente, pente * 1000.0, L_CANAL])
+	elif source_eau != "pompe":
+		var h_eau: float = max(canal_h - REVANCHE, 0.0)
+		var v: float = q / max(Hydraulique.section_trapeze(canal_b, h_eau, FRUIT), 0.0001)
+		_texte("Trapèze, fruit 1/1, Ks = 30, pente %s %.1f ‰, revanche %.0f cm. Vitesse : %.2f m/s%s" % [src_pente, pente * 1000.0, REVANCHE * 100.0, v, "  [color=#ffb347](> 0,8 m/s : érosion)[/color]" if v > 0.8 else ""])
+	if adduction == "canal":
+		_curseur("Largeur au plafond du canal : %.2f m" % canal_b, 0.2, 2.0, 0.05, canal_b, func(x): canal_b = x; _ecran_conception())
+		_curseur("Profondeur totale du canal : %.2f m" % canal_h, 0.2, 1.0, 0.05, canal_h, func(x): canal_h = x; _ecran_conception())
+	# --- Stockage ---
+	_curseur("Petit barrage en terre sur le marigot : %s" % ("aucun" if barrage_h <= 0.0 else "%.1f m de haut" % barrage_h), 0.0, 5.0, 0.5, barrage_h, func(x): barrage_h = x; _ecran_conception())
+	if barrage_h > 0.0:
+		_vu("retenue")
+		_texte("Largeur en crête (Knappen) : %.1f m · remblai : %.0f m³ · retenue : [b]%.0f m³[/b], soit %.0f jours de besoin de pointe." % [Hydrologie.crete_knappen(barrage_h), _volume_barrage(), _capacite_retenue(), _capacite_retenue() / max(q_projet * 86400.0, 1.0)])
+	# --- Parcelle ---
 	_curseur("Hauteur des diguettes : %.0f cm" % (diguette_h * 100.0), 0.10, 0.35, 0.05, diguette_h, func(x): diguette_h = x; _ecran_conception())
 	var crue_txt := ("Pas de crue à craindre sur ce site." if VRAI.crue_10ans <= 0.0 else "Crue de référence : %.1f m (2 ans), %.1f m (10 ans)." % [VRAI.crue_2ans, VRAI.crue_10ans]) if fait.has("hydro") else "[color=#ffb347]Pas d'étude hydrologique : les anciens parlent d'environ %.1f m d'eau certaines années.[/color]" % CROYANCE.crue
 	_texte(crue_txt)
@@ -1070,25 +1387,185 @@ func _ecran_conception() -> void:
 		avec_drain = not avec_drain
 		_ecran_conception())
 	var total := 0.0
-	var devis := "[b]Devis estimatif[/b]\n"
+	var devis := "[b]Achats de matériel[/b]\n"
 	var cd := _cout_travaux()
 	for k in cd:
 		devis += "%s : %s\n" % [k, _fcfa(cd[k])]
 		total += cd[k]
-	var camp: float = _charges_campagne_ha() * 5.0
-	devis += "[b]Total travaux : %s[/b]\nCharges de la campagne à prévoir : %s" % [_fcfa(total), _fcfa(camp)]
-	if tresorerie < total + camp:
-		devis += "\n[color=#ffb347]Trésorerie insuffisante : la microfinance prêtera le complément (intérêts 12 %% sur la campagne).[/color]"
+	var l := _creer_lots()
+	devis += "[b]Total matériel : %s[/b]\nTerrassements à faire : [b]%.0f m³[/b] (la main-d'œuvre se règle à l'étape suivante)." % [_fcfa(total), _volume_manoeuvres(l)]
 	_texte(devis)
-	_bouton("Voir le calcul de Manning-Strickler", func():
-		var s: float = Hydraulique.section_trapeze(canal_b, h_eau, FRUIT)
-		var pm: float = Hydraulique.perimetre_trapeze(canal_b, h_eau, FRUIT)
-		_afficher_popup("[b][font_size=24]Capacité du canal[/font_size][/b]\n\nSection mouillée S = (b + m·h)·h = (%.2f + 1 × %.2f) × %.2f = [b]%.3f m²[/b]\nPérimètre mouillé P = b + 2h√(1 + m²) = [b]%.3f m[/b]\nRayon hydraulique Rh = S ÷ P = [b]%.3f m[/b]\nQ = Ks · S · Rh^(2/3) · √I = 30 × %.3f × %.3f × %.4f = [b]%.4f m³/s = %.1f L/s[/b]\n\nLa hauteur d'eau est la profondeur moins la revanche (15 à 20 cm dans ton cours).\n\n[color=#1F4E79][i]Dans ton cours : L3 — Bases techniques, ch. 6 ; L2 — Hydraulique générale, ch. 5 (écoulements à surface libre).\nValeur indicative : Ks = 30 pour un canal en terre.[/i][/color]" % [canal_b, h_eau, h_eau, s, pm, s / max(pm, 0.001), s, pow(s / max(pm, 0.001), 2.0 / 3.0), sqrt(pente), q, q * 1000.0], [["Fermer", Callable()]]))
-	_bouton("Lancer les travaux puis la campagne", func():
-		for k in cd:
-			_payer(k, cd[k], "travaux")
-		jours_ecoules += 45
-		_aller(Etape.CAMPAGNE))
+	if source_eau != "pompe" and adduction == "canal":
+		_bouton("Voir le calcul de Manning-Strickler", func():
+			var h_eau: float = max(canal_h - REVANCHE, 0.0)
+			var sm: float = Hydraulique.section_trapeze(canal_b, h_eau, FRUIT)
+			var pm: float = Hydraulique.perimetre_trapeze(canal_b, h_eau, FRUIT)
+			_afficher_popup("[b][font_size=24]Capacité du canal[/font_size][/b]\n\nSection mouillée S = (b + m·h)·h = [b]%.3f m²[/b]\nPérimètre mouillé P = b + 2h√(1 + m²) = [b]%.3f m[/b]\nRayon hydraulique Rh = S ÷ P = [b]%.3f m[/b]\nQ = Ks · S · Rh^(2/3) · √I = [b]%.1f L/s[/b]\n\n[color=#1F4E79][i]Dans ton cours : L3 — Bases techniques, ch. 6 ; L2 — Hydraulique générale, ch. 5. Ks = 30 : valeur indicative.[/i][/color]" % [sm, pm, sm / max(pm, 0.001), q * 1000.0], [["Fermer", Callable()]]))
+	_bouton("Passer au recrutement de l'équipe", func(): _aller(Etape.RECRUTEMENT))
+
+
+# =====================================================================
+#  ÉQUIPE ET CHANTIER
+# =====================================================================
+
+func _ecran_recrutement() -> void:
+	_vider()
+	for id in ["chantier", "contrats"]:
+		_vu(id)
+	titre.text = "5. Recruter l'équipe"
+	var sm: Dictionary = couts.salaires_mensuels
+	var village := Vector3(-320, Terrain.hauteur(-320, -40), -40)
+	if cam_cible.distance_to(village) > 5.0 and etape == Etape.RECRUTEMENT:
+		var tw := create_tween()
+		tw.tween_property(self, "cam_cible", village, 1.2)
+		tw.parallel().tween_property(avatar, "position", village + Vector3(14, 0, 10), 1.5)
+	_texte("Tu es au village. Les [b]manœuvres[/b] se recrutent ici, avec l'accord du chef de village ; les [b]maçons[/b] et le [b]chef de chantier[/b] viennent de la ville ; la pelle mécanique se loue à la journée.\nLe chantier ouvre [b]%d jours[/b] avant la date de repiquage prévue (%s). S'il finit en retard, le repiquage glisse d'autant." % [FENETRE_CHANTIER, SEMIS[semis_idx].nom])
+	_curseur("Manœuvres : %d — %s par mois chacun" % [equipe.manoeuvres, _fcfa(sm.manoeuvre)], 4, 20, 1, equipe.manoeuvres, func(x): equipe.manoeuvres = int(x); _ecran_recrutement())
+	_curseur("Maçons : %d — %s par mois chacun" % [equipe.macons, _fcfa(sm.macon)], 1, 4, 1, equipe.macons, func(x): equipe.macons = int(x); _ecran_recrutement())
+	_bouton(("☑ " if equipe.chef else "☐ ") + "Chef de chantier — %s par mois (rendement +20 %%, moins de malfaçons)" % _fcfa(sm.chef_chantier), func():
+		equipe.chef = not equipe.chef; _ecran_recrutement())
+	_bouton(("☑ " if equipe.pelle else "☐ ") + "Pelle mécanique — %s par jour (planage, digue, barrage)" % _fcfa(couts.pelle_jour), func():
+		equipe.pelle = not equipe.pelle; _ecran_recrutement())
+	_bouton(("☑ " if repas else "☐ ") + "Repas servis sur place — %s par personne et par jour (sinon ils rentrent manger au village)" % _fcfa(couts.energie.repas_jour), func():
+		repas = not repas; _ecran_recrutement())
+	_curseur("Riziculteurs pour la campagne : %d — %s par mois chacun (repère : 1 par hectare)" % [equipe.riziculteurs, _fcfa(sm.riziculteur)], 2, 8, 1, equipe.riziculteurs, func(x): equipe.riziculteurs = int(x); _ecran_recrutement())
+	var d := _duree_prevue()
+	var couleur := "#8fd18f" if d <= FENETRE_CHANTIER else "#ff7b7b"
+	_texte("[b]Prévision[/b] (hors pluie et fatigue)\nDurée du chantier : [color=%s][b]%.0f jours[/b][/color] pour %d disponibles\nCoût journalier : %s → environ [b]%s[/b]\nDurée = volume ÷ (effectif × %.0f m³ par personne et par jour)\n[i]Salaires et rendements indicatifs, à vérifier (minimum légal en vigueur).[/i]" % [couleur, d, FENETRE_CHANTIER, _fcfa(_salaires_chantier_jour()), _fcfa(_salaires_chantier_jour() * d), float(couts.productivite.manoeuvre_m3_j)])
+	_bouton("Signer les contrats et ouvrir le chantier", func(): _aller(Etape.TRAVAUX))
+
+
+func _demarrer_travaux() -> void:
+	var cd := _cout_travaux()
+	for k in cd:
+		_payer(k, cd[k], "travaux")
+	lots = _creer_lots()
+	chantier = {"jour": 0, "debut": (int(SEMIS[semis_idx].jour) - FENETRE_CHANTIER + 365) % 365, "fini": false, "salaires": 0.0}
+	chantier_meteo = Meteo.new(climat, rng.randi())
+	chantier_meteo.facteur_pluie = site.pluie_pct / 100.0
+	var roles: Array = []
+	for k in int(equipe.manoeuvres): roles.append("manœuvre")
+	for k in int(equipe.macons): roles.append("maçon")
+	monde.repas_fournis = repas
+	var premier = _lot_courant("manœuvre")
+	monde.zone = premier.zone if premier != null else lots[0].zone
+	monde.creer_equipe(roles)
+	Terrain.casiers_niveles = false
+	_construire_amenagement()
+	_maj_progression()
+	en_pause = false
+	cumul_temps = 0.0
+	pluie_forte = false
+	cam_cible = Vector3(100, Terrain.hauteur(100, -100), -100)
+	_vider()
+	titre.text = "6. Chantier"
+	_texte("")
+	_barre_temps()
+	_texte("")
+
+
+func _lot_courant(role: String) -> Variant:
+	for x in lots:
+		if x.role == role and x.fait < x.total:
+			return x
+	return null
+
+
+func _jour_de_travaux() -> void:
+	chantier.jour += 1
+	var w := chantier_meteo.jour(chantier.debut + chantier.jour)
+	# Travail réellement fourni aujourd'hui par les agents (heures efficaces)
+	var h_man: float = monde.relever_travail("manœuvre")
+	var h_mac: float = monde.relever_travail("maçon")
+	var cap: float = h_man / 8.0 * float(couts.productivite.manoeuvre_m3_j) * (1.2 if equipe.chef else 1.0)
+	var cap_pelle: float = (float(couts.productivite.pelle_m3_j) * (0.3 if pluie_forte else 1.0)) if equipe.pelle else 0.0
+	var cap_mac: float = h_mac / 8.0
+	var planage_avant: bool = _lot_fini("planage")
+	for x in lots:
+		var reste: float = x.total - x.fait
+		if reste <= 0.0:
+			continue
+		if x.role == "maçon":
+			var f: float = min(reste, cap_mac)
+			x.fait += f
+			cap_mac -= f
+		else:
+			if x.pelle and cap_pelle > 0.0:
+				var fp: float = min(reste, cap_pelle)
+				x.fait += fp
+				cap_pelle -= fp
+				reste -= fp
+			var fm: float = min(reste, cap)
+			x.fait += fm
+			cap -= fm
+	var cout_j := _salaires_chantier_jour()
+	chantier.salaires += cout_j
+	tresorerie -= cout_j
+	jours_ecoules += 1
+	if _lot_fini("planage") and not planage_avant:
+		Terrain.casiers_niveles = true
+		_reconstruire_terrain()
+		_construire_amenagement()
+	_maj_progression()
+	for m in monde.evenements_agents:
+		info.text = m
+	monde.evenements_agents.clear()
+	pluie_forte = w.pluie > 10.0
+	monde.il_pleut = w.pluie > 4.0
+	monde.nebulosite = clamp(0.2 + w.pluie / 25.0, 0.0, 1.0)
+	var lm = _lot_courant("manœuvre")
+	if lm != null:
+		monde.zone = lm.zone
+	_maj_hud()
+	if panneau.get_child_count() >= 5:
+		var txt := "[b]Jour %d du chantier[/b] — repiquage prévu dans %d jours\nMétéo : %s\nÉquipe : %s\n" % [chantier.jour, FENETRE_CHANTIER - chantier.jour, "pluie forte, terrassements ralentis" if pluie_forte else ("pluie" if monde.il_pleut else "temps sec"), monde.resume_equipe()]
+		(panneau.get_child(0) as RichTextLabel).text = txt
+		var t2 := "[b]Avancement des ouvrages[/b]\n"
+		for x in lots:
+			var pc: float = x.fait / max(x.total, 0.001) * 100.0
+			t2 += "%s %s : %d %%\n" % ["✔" if pc >= 99.9 else "▸", x.nom, int(pc)]
+		t2 += "Dépensé en salaires, engins et repas : %s" % _fcfa(chantier.salaires)
+		(panneau.get_child(panneau.get_child_count() - 1) as RichTextLabel).text = t2
+	var tout := true
+	for x in lots:
+		if x.fait < x.total - 0.001:
+			tout = false
+	if tout:
+		_fin_travaux()
+
+
+func _lot_fini(id: String) -> bool:
+	for x in lots:
+		if x.id == id:
+			return x.fait >= x.total - 0.001
+	return true
+
+
+## Les ouvrages apparaissent au fur et à mesure de l'avancement de leur lot
+func _maj_progression() -> void:
+	for x in lots:
+		if not groupes.has(x.id):
+			continue
+		var g: Node3D = groupes[x.id]
+		var n: int = g.get_child_count()
+		var visibles: int = int(round(x.fait / max(x.total, 0.001) * n))
+		for k in n:
+			(g.get_child(k) as Node3D).visible = k < visibles
+
+
+func _fin_travaux() -> void:
+	chantier.fini = true
+	retard_j = max(0, int(chantier.jour) - FENETRE_CHANTIER)
+	charges.append(["Salaires, engins et repas du chantier (%d jours)" % chantier.jour, chantier.salaires, "travaux"])
+	monde.ouvriers_actifs = false
+	var msg := "Les ouvrages sont terminés en [b]%d jours[/b] (prévision : %.0f)." % [chantier.jour, _duree_prevue()]
+	if retard_j > 0:
+		msg += "\n\n[color=#b03030][b]Retard de %d jours[/b][/color] sur la date de repiquage : le riz sera repiqué plus tard dans la saison, avec les conséquences climatiques que cela implique." % retard_j
+		evenements.append("retard")
+	else:
+		msg += "\n\nTu es dans les temps : il restait %d jours de marge." % (FENETRE_CHANTIER - int(chantier.jour))
+	msg += "\n\nMain-d'œuvre, engins et repas : %s." % _fcfa(chantier.salaires)
+	_afficher_popup("[b][font_size=24]Réception des travaux[/font_size][/b]\n\n" + msg, [["Lancer la campagne", func(): _aller(Etape.CAMPAGNE)]])
 
 
 ## Volume de terre à déplacer pour mettre à plat 20 casiers de 50 m x 50 m (ordre de grandeur)
@@ -1108,12 +1585,18 @@ func _charges_campagne_ha() -> float:
 # =====================================================================
 
 func _demarrer_campagne() -> void:
-	_construire_amenagement()
+	if eau_mm == null or not is_instance_valid(eau_mm):
+		Terrain.casiers_niveles = true
+		_reconstruire_terrain()
+		_construire_amenagement()
+	for id in groupes:
+		for c in groupes[id].get_children():
+			c.visible = true
 	for id in ["bilan", "stress", "aue"]:
 		_vu(id)
-	_payer("Intrants et main-d'œuvre de la campagne (5 ha)", _charges_campagne_ha() * 5.0, "campagne")
+	_payer("Intrants de la campagne (5 ha) : semences, engrais, protection, battage", _charges_campagne_ha() * 5.0, "campagne")
 	var meteo := Meteo.new(climat, rng.randi())
-	var jour_semis: int = SEMIS[semis_idx].jour
+	var jour_semis: int = int(SEMIS[semis_idx].jour) + retard_j
 	meteo.secheresse_debut = ((jour_semis + 52 - 1) % 365) + 1
 	campagne = Campagne.new(riz, meteo)
 	var sol: Dictionary = VRAI.sol
@@ -1126,7 +1609,13 @@ func _demarrer_campagne() -> void:
 	campagne.percolation_mm_j = sol.percolation_mm_j
 	campagne.hauteur_diguette_mm = diguette_h * 1000.0
 	campagne.q_canal_m3_s = _capacite_canal(VRAI.pente_canal)
-	campagne.efficience = EFFICIENCE
+	campagne.efficience = _efficience()
+	if barrage_h > 0.0:
+		campagne.retenue_capacite_m3 = _capacite_retenue()
+		campagne.retenue_surface_m2 = 12000.0
+		# remplissage initial selon la pluie des deux mois précédant le repiquage
+		var p2: float = (float(climat.pluie_mm[Meteo.mois_du_jour(jour_semis + 335)]) + float(climat.pluie_mm[Meteo.mois_du_jour(jour_semis + 305)])) * site.pluie_pct / 100.0
+		campagne.retenue_m3 = campagne.retenue_capacite_m3 * clamp(p2 / 200.0, 0.1, 1.0)
 	campagne.q_riviere_m3_s = VRAI.q_riviere
 	campagne.drainage_mm_j = float(topo.drainage_naturel) + (float(topo.drain_capacite) if avec_drain else 0.0)
 	campagne.hauteur_digue_m = digue_h
@@ -1142,7 +1631,18 @@ func _demarrer_campagne() -> void:
 		var t2 := rng.randf()
 		campagne.crue_hauteur_m = VRAI.crue_2ans if t2 < 0.55 else (VRAI.crue_10ans if t2 < 0.9 else VRAI.crue_50ans)
 	campagne.demarrer()
-	monde.placer_ouvriers()
+	var roles: Array = []
+	for k in int(equipe.riziculteurs): roles.append("riziculteur")
+	monde.zone = Terrain.PARCELLE
+	monde.repas_fournis = repas
+	monde.creer_equipe(roles)
+	salaires_campagne = 0.0
+	carburant_fcfa = 0.0
+	energie_kwh = {"solaire": 0.0, "thermique": 0.0}
+	preleve_veille = 0.0
+	heures_rizi = 0.0
+	pluie_forte = false
+	cam_cible = Vector3(140, Terrain.hauteur(140, 0), 0)
 	en_pause = false
 	cumul_temps = 0.0
 	_ecran_campagne()
@@ -1150,22 +1650,19 @@ func _demarrer_campagne() -> void:
 
 func _ecran_campagne() -> void:
 	_vider()
-	titre.text = "5. Campagne de riz"
+	titre.text = "7. Campagne de riz"
 	_texte("")
-	var ligne := HBoxContainer.new()
-	panneau.add_child(ligne)
-	for v in [["Pause", 0.0], ["1 j = 5 s", 0.2], ["Normal", 2.0], ["Rapide", 12.0]]:
-		var b := Button.new()
-		b.text = v[0]
-		b.custom_minimum_size = Vector2(0, 48)
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var vv: float = v[1]
-		b.pressed.connect(func():
-			en_pause = vv == 0.0
-			if vv > 0.0:
-				vitesse = vv)
-		ligne.add_child(b)
+	_barre_temps()
 	_texte("")
+
+
+## Volume que la pompe peut fournir aujourd'hui (m3) et énergie solaire disponible (kWh)
+func _pompage_du_jour(jour_annee: int, pluvieux: bool) -> Array:
+	var e_sol: float = _kwc() * _ensoleillement(Meteo.mois_du_jour(jour_annee)) * float(couts.energie.ratio_performance) * (0.5 if pluvieux else 1.0)
+	var v: float = pompe_q / 1000.0 * 3600.0 * _heures_pompage()
+	if part_solaire >= 99.0:
+		v = min(v, e_sol / max(_kwh_par_m3(), 0.0001))
+	return [v, e_sol]
 
 
 func _jour_de_campagne() -> void:
@@ -1177,6 +1674,10 @@ func _jour_de_campagne() -> void:
 		evenements.append("litige")
 		_afficher_popup("[b][font_size=24]Litige foncier[/font_size][/b]\n\nUn membre de la famille détentrice conteste ton droit d'exploiter la parcelle et fait fermer ta prise d'eau. Il faut 12 jours de médiation chez le chef de village et %s de frais pour reprendre.\n\nRisque de litige au départ : %d %%." % [_fcfa(couts.litige), int(_risque_litige() * 100.0)], [["Continuer", Callable()]])
 	var q_normal := _capacite_canal(VRAI.pente_canal) + (0.008 if motopompe else 0.0)
+	var pomp: Array = [0.0, 0.0]
+	if source_eau == "pompe":
+		pomp = _pompage_du_jour(campagne.jour_semis + j - 1, monde.il_pleut)
+		q_normal = pomp[0] / 86400.0 + (0.008 if motopompe else 0.0)
 	if litige_jours_restants > 0:
 		campagne.q_canal_m3_s = 0.0
 		litige_jours_restants -= 1
@@ -1196,6 +1697,26 @@ func _jour_de_campagne() -> void:
 	var l := campagne.jour_suivant()
 	if l.is_empty():
 		return
+	# Énergie de pompage du jour : le solaire d'abord, le gasoil pour le reste
+	if source_eau == "pompe":
+		var e: float = (campagne.tot.preleve_m3 - preleve_veille) * _kwh_par_m3()
+		var e_s: float = min(e, pomp[1])
+		energie_kwh.solaire += e_s
+		energie_kwh.thermique += e - e_s
+		var cout_c: float = (e - e_s) * float(couts.energie.conso_l_par_kwh) * float(couts.energie.gasoil_fcfa_l)
+		carburant_fcfa += cout_c
+		tresorerie -= cout_c
+	preleve_veille = campagne.tot.preleve_m3
+	# Riziculteurs : salaires au jour le jour, heures réellement travaillées
+	var sal_j: float = equipe.riziculteurs * float(couts.salaires_mensuels.riziculteur) / 30.0 + (equipe.riziculteurs * float(couts.energie.repas_jour) if repas else 0.0)
+	salaires_campagne += sal_j
+	tresorerie -= sal_j
+	heures_rizi += monde.relever_travail("riziculteur")
+	monde.mode_recolte = campagne.jour > campagne.duree() - 10
+	pluie_forte = l.pluie > 10.0
+	for m in monde.evenements_agents:
+		info.text = m
+	monde.evenements_agents.clear()
 	if campagne.crue_jour == campagne.jour:
 		evenements.append("crue")
 		var protege: bool = digue_h >= campagne.crue_hauteur_m
@@ -1218,12 +1739,12 @@ func _jour_de_campagne() -> void:
 	riz_mat.set_shader_parameter("vent", monde.vent)
 	jours_ecoules += 1
 	_maj_hud()
-	if panneau.get_child_count() >= 3:
+	if panneau.get_child_count() >= 5:
 		var etat := "[color=#8fd18f]confort hydrique[/color]" if l.ks > 0.99 else "[color=#ff7b7b]STRESS HYDRIQUE (Ks = %.2f)[/color]" % l.ks
 		if l.submerge:
 			etat = "[color=#ff7b7b]CASIERS SUBMERGÉS PAR LA CRUE[/color]"
-		(panneau.get_child(0) as RichTextLabel).text = "[b]Jour %d / %d[/b] — stade : %s\nAux champs : %s\nPluie : %.0f mm · ET0 : %.1f mm · Kc : %.2f\nIrrigation : %.1f mm · Lame d'eau : [b]%.0f mm[/b]\nÉtat : %s" % [campagne.jour, campagne.duree(), _stade(campagne.jour), _travail_du_jour(campagne.jour), l.pluie, l.et0, l.kc, l.irrigation, l.lame, etat]
-		(panneau.get_child(2) as RichTextLabel).text = "[b]Bilan d'eau cumulé (mm)[/b]\nPluie %.0f + irrigation %.0f\n= ETr %.0f + percolation %.0f + drainage %.0f + débordement %.0f + stock\nJours de stress : %d · de submersion : %d · de débordement : %d\nCapacité du canal : %.1f L/s%s" % [campagne.tot.pluie, campagne.tot.irrigation, campagne.tot.etr, campagne.tot.percolation, campagne.tot.drainage, campagne.tot.debordement, campagne.jours_stress, campagne.jours_submersion, campagne.jours_debordement, campagne.q_canal_m3_s * 1000.0, "  (prise fermée : litige)" if litige_jours_restants > 0 else ""]
+		(panneau.get_child(0) as RichTextLabel).text = "[b]Jour %d / %d[/b] — stade : %s\nAux champs : %s\nÉquipe : %s\nPluie : %.0f mm · ET0 : %.1f mm · Kc : %.2f\nIrrigation : %.1f mm · Lame d'eau : [b]%.0f mm[/b]\nÉtat : %s" % [campagne.jour, campagne.duree(), _stade(campagne.jour), _travail_du_jour(campagne.jour), monde.resume_equipe(), l.pluie, l.et0, l.kc, l.irrigation, l.lame, etat]
+		(panneau.get_child(panneau.get_child_count() - 1) as RichTextLabel).text = "[b]Bilan d'eau cumulé (mm)[/b]\nPluie %.0f + irrigation %.0f\n= ETr %.0f + percolation %.0f + drainage %.0f + débordement %.0f + stock\nJours de stress : %d · de submersion : %d · de débordement : %d\nCapacité du canal : %.1f L/s%s" % [campagne.tot.pluie, campagne.tot.irrigation, campagne.tot.etr, campagne.tot.percolation, campagne.tot.drainage, campagne.tot.debordement, campagne.jours_stress, campagne.jours_submersion, campagne.jours_debordement, campagne.q_canal_m3_s * 1000.0, "  (prise fermée : litige)" if litige_jours_restants > 0 else ""] + ("\nRetenue : %.0f m³ sur %.0f" % [campagne.retenue_m3, campagne.retenue_capacite_m3] if barrage_h > 0.0 else "") + ("\nÉnergie de pompage : %.0f kWh solaires, %.0f kWh au gasoil (%s)" % [energie_kwh.solaire, energie_kwh.thermique, _fcfa(carburant_fcfa)] if source_eau == "pompe" else "")
 	if campagne.termine:
 		_aller(Etape.BILAN)
 
@@ -1253,7 +1774,14 @@ func _ecran_bilan() -> void:
 	_vider()
 	for id in ["ky", "van"]:
 		_vu(id)
-	titre.text = "6. Bilan de campagne"
+	titre.text = "8. Bilan de campagne"
+	# Main-d'œuvre de campagne : le manque d'heures de travail (désherbage, surveillance) pèse sur le rendement
+	var ratio_mo: float = clamp(heures_rizi / (5.0 * 5.0 * campagne.duree()), 0.0, 1.0)
+	campagne.facteur_fertilite = float(VRAI.sol.fertilite) * (0.6 + 0.4 * ratio_mo)
+	charges.append(["Salaires et repas des riziculteurs", salaires_campagne, "campagne"])
+	if carburant_fcfa > 0.0:
+		charges.append(["Gasoil de pompage", carburant_fcfa, "campagne"])
+	monde.ouvriers_actifs = false
 	var r := campagne.resultat()
 	var recettes: float = r.production_t * 1000.0 * riz.prix_fcfa_kg
 	var redevance: float = campagne.tot.preleve_m3 * couts.eau_redevance_m3
@@ -1261,12 +1789,14 @@ func _ecran_bilan() -> void:
 	var invest := 0.0
 	var ch_camp := 0.0
 	for c in charges:
+		if c[2] == "apport":
+			continue
 		if c[2] == "campagne":
 			ch_camp += c[1]
 		else:
 			invest += c[1]
 	var interets := 0.0
-	if tresorerie < 0.0:
+	if tresorerie < 0.0 and not budget_illimite:
 		interets = -tresorerie * 0.12
 		_payer("Intérêts du prêt de campagne (12 %)", interets, "campagne")
 		ch_camp += interets
@@ -1297,6 +1827,15 @@ func _ecran_bilan() -> void:
 	var total := (note_diag + note_calc + note_fonc + note_rent + note_dur) / 5.0
 	_texte("[b]Rendement : %.2f t/ha[/b] (potentiel %.1f) — production %.1f t de paddy\nRecettes : %s\nCharges de campagne : %s\n[b]Marge de la campagne : %s[/b]\nInvestissement (foncier, études, travaux) : %s\n\n[b]Sur 5 ans à 2 campagnes par an[/b] (taux 10 %%)\nVAN : %s · TRI : %s · Récupération : %s\nPatrimoine en fin de campagne (trésorerie + ouvrages réalisés) : [b]%s[/b]\n\nEau prélevée : %.0f m³ — productivité : %.2f kg de paddy par m³\nÉcart de fermeture du bilan d'eau : %.3f mm" % [r.rendement_t_ha, riz.rendement_max_t_ha, r.production_t, _fcfa(recettes), _fcfa(ch_camp), _fcfa(marge), _fcfa(invest), _fcfa(van), ("%.0f %%" % (tri * 100.0)) if not is_nan(tri) else "aucun", ("%.1f ans" % delai) if delai >= 0.0 else "jamais", _fcfa(tresorerie + _valeur_ouvrages()), campagne.tot.preleve_m3, r.productivite_eau_kg_m3, campagne.erreur_bilan()])
 	_texte("[b]Évaluation : %.1f / 20[/b]\nDiagnostic (études) : %.0f · Calculs : %.0f · Sécurité foncière : %.0f · Rentabilité : %.0f · Durabilité : %.0f" % [total, note_diag, note_calc, note_fonc, note_rent, note_dur])
+	var extra := ""
+	if ratio_mo < 0.9:
+		extra += "\nMain-d'œuvre : seulement %d %% des heures de travail nécessaires ont été fournies." % int(ratio_mo * 100.0)
+	if source_eau == "pompe":
+		extra += "\nPompage : %.0f kWh solaires et %.0f kWh au gasoil (%s)." % [energie_kwh.solaire, energie_kwh.thermique, _fcfa(carburant_fcfa)]
+	if retard_j > 0:
+		extra += "\nRepiquage retardé de %d jours par le chantier." % retard_j
+	if extra != "":
+		_texte("[b]Équipe, énergie, délais[/b]" + extra)
 	var deb := _debriefing(r, ratio)
 	_bouton("Lire le débriefing du professeur", func(): _afficher_popup(deb, [["Fermer", Callable()]]))
 	_bouton("Rejouer avec d'autres choix", _nouvelle_partie)
@@ -1406,6 +1945,9 @@ func _pilote_clics() -> void:
 	await _capture("clics_3_manning")
 	popup_boutons.get_child(0).pressed.emit()
 	_boutons()[_boutons().size() - 1].pressed.emit()
+	await get_tree().process_frame
+	_boutons()[_boutons().size() - 1].pressed.emit()
+	await get_tree().process_frame
 	vitesse = 60.0
 	while etape != Etape.BILAN:
 		if popup.visible:
@@ -1483,11 +2025,35 @@ func _pilote_auto(mode: String) -> void:
 	_aller(Etape.CONCEPTION)
 	await get_tree().create_timer(0.3).timeout
 	await _capture(mode + "_3_conception")
-	var cd := _cout_travaux()
-	for k in cd:
-		_payer(k, cd[k], "travaux")
+	var opts := OS.get_environment("AGRISIM_OPTIONS")
+	if "pompe" in opts:
+		source_eau = "pompe"; pompe_q = ceil(q_projet * 1000.0 * 1.2); part_solaire = 60.0; batterie_kwh = 5.0
+	if "pvc" in opts:
+		adduction = "pvc"
+	if "barrage" in opts:
+		barrage_h = 3.0
+	equipe.chef = bon
+	equipe.pelle = bon
+	equipe.manoeuvres = 14 if bon else 5
+	_aller(Etape.RECRUTEMENT)
+	await get_tree().create_timer(0.3).timeout
+	await _capture(mode + "_3b_equipe")
+	vitesse = 0.5
+	_aller(Etape.TRAVAUX)
+	cam_dist = 300.0
+	var vu := false
+	while etape == Etape.TRAVAUX:
+		if chantier.jour >= 6 and not vu:
+			vu = true
+			cam_cible = Vector3(140, Terrain.hauteur(140, 0), 0)
+			await get_tree().create_timer(0.4).timeout
+			await _capture(mode + "_3c_chantier")
+			vitesse = 60.0
+		if popup.visible:
+			print("CHANTIER ", chantier.jour, " jours, salaires=", chantier.salaires, " retard=", retard_j)
+			popup_boutons.get_child(0).pressed.emit()
+		await get_tree().process_frame
 	vitesse = 60.0
-	_aller(Etape.CAMPAGNE)
 	cam_dist = 260.0
 	cam_pitch = 0.6
 	var pris := false
@@ -1497,6 +2063,10 @@ func _pilote_auto(mode: String) -> void:
 		if campagne.jour >= 70 and not pris:
 			pris = true
 			await _capture(mode + "_4_campagne")
+			_fiche_ouvrier(1)
+			await get_tree().create_timer(0.2).timeout
+			await _capture(mode + "_4b_ouvrier")
+			popup.visible = false
 		await get_tree().process_frame
 	await get_tree().create_timer(0.3).timeout
 	await _capture(mode + "_5_bilan")
