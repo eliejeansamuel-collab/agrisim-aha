@@ -1,0 +1,289 @@
+{
+ "evenements": [
+  {
+   "id": "chef_terre",
+   "titre": "Un chef de terre conteste le tracé",
+   "texte": "Dans une zone en travaux, un chef de terre affirme que le canal traverse des parcelles de sa famille.",
+   "si": {
+    "en_cours": "o_canaux",
+    "non_fait": [
+     "g_foncier"
+    ]
+   },
+   "choix": [
+    {
+     "texte": "Négocier et indemniser",
+     "effets": {
+      "budget": -12,
+      "adhesion": 4
+     },
+     "suite": "L'accord est signé devant le village. Les travaux reprennent."
+    },
+    {
+     "texte": "Passer en force",
+     "effets": {
+      "adhesion": -8,
+      "incident": "conflit_foncier",
+      "reputation": -2
+     },
+     "suite": "Le chantier avance, mais un conflit foncier éclate."
+    }
+   ],
+   "lecon": "Sans purge des droits fonciers avant les travaux, chaque ouvrage peut devenir un litige. Cours : Droit foncier rural (L2)."
+  },
+  {
+   "id": "compactage",
+   "titre": "L'entreprise veut gagner du temps",
+   "texte": "L'entreprise propose de réduire le compactage des remblais pour finir plus vite et te rembourser une partie du marché.",
+   "si": {
+    "en_cours": "o_barrage"
+   },
+   "choix": [
+    {
+     "texte": "Refuser et contrôler",
+     "effets": {
+      "budget": -6,
+      "risque": -5
+     },
+     "suite": "Tu paies un contrôle de compactage. L'ouvrage est conforme."
+    },
+    {
+     "texte": "Accepter",
+     "effets": {
+      "budget": 20,
+      "risque": 15,
+      "defaut": "barrage_fragile"
+     },
+     "suite": "Tu récupères 20 millions. Le remblai est moins solide que prévu."
+    }
+   ],
+   "lecon": "Un remblai mal compacté résiste mal aux crues : la sécurité d'un barrage ne se négocie pas. Cours : Stockage des eaux de surface (L3)."
+  },
+  {
+   "id": "transhumance",
+   "titre": "Des troupeaux dans le périmètre",
+   "texte": "Des éleveurs transhumants traversent les casiers pour atteindre la rivière. Des cultures sont piétinées.",
+   "si": {
+    "fait": [
+     "o_canaux"
+    ]
+   },
+   "choix": [
+    {
+     "texte": "Aménager un couloir de passage et un point d'eau",
+     "effets": {
+      "budget": -15,
+      "adhesion": 3,
+      "reputation": 1
+     },
+     "suite": "Le couloir est balisé. Éleveurs et agriculteurs signent un accord."
+    },
+    {
+     "texte": "Interdire le passage",
+     "effets": {
+      "incident": "conflit_foncier",
+      "adhesion": -3
+     },
+     "suite": "Les éleveurs passent quand même. La tension monte."
+    }
+   ],
+   "lecon": "Un aménagement doit prévoir les autres usages de l'eau, dont l'abreuvement du bétail. Cours : Stockage des eaux de surface (besoins du bétail)."
+  },
+  {
+   "id": "dessous",
+   "titre": "Une enveloppe sur la table",
+   "texte": "Un intermédiaire propose d'accélérer tous les chantiers contre un « geste ».",
+   "si": {},
+   "choix": [
+    {
+     "texte": "Refuser et signaler",
+     "effets": {
+      "reputation": 2,
+      "risque": -8
+     },
+     "suite": "Le bailleur apprécie. Les chantiers suivent leur rythme normal."
+    },
+    {
+     "texte": "Accepter",
+     "effets": {
+      "budget": -10,
+      "risque": 25,
+      "accelere": 3
+     },
+     "suite": "Les chantiers avancent d'un coup. Mais la rumeur circule."
+    }
+   ],
+   "lecon": "Les détournements ralentissent les chantiers et détruisent la confiance du bailleur. Cours : Civisme ; Gestion de projet."
+  },
+  {
+   "id": "contre_saison",
+   "titre": "Demande de contre-saison",
+   "texte": "Les producteurs demandent à cultiver aussi en saison sèche. La ressource en eau le permet-elle ?",
+   "si": {
+    "fait": [
+     "o_canaux"
+    ],
+    "non_fait": [
+     "o_barrage"
+    ]
+   },
+   "choix": [
+    {
+     "texte": "Limiter au quart des surfaces, près de la rivière",
+     "effets": {
+      "adhesion": -1,
+      "contre_saison": 0.25
+     },
+     "suite": "Un quart des casiers est repiqué en saison sèche, là où l'eau arrive encore."
+    },
+    {
+     "texte": "Autoriser sur toutes les zones équipées",
+     "effets": {
+      "adhesion": 3,
+      "contre_saison": 1.0
+     },
+     "suite": "Tout le monde repique. Sans stockage, la rivière décidera."
+    }
+   ],
+   "lecon": "La surface irrigable en saison sèche se calcule : débit disponible divisé par le débit fictif continu. Cours : Bases techniques de l'irrigation."
+  },
+  {
+   "id": "rapport",
+   "titre": "Mission de supervision du bailleur",
+   "texte": "Le bailleur envoie une mission. Elle veut voir des zones mises en valeur.",
+   "si": {
+    "annee_min": 2
+   },
+   "choix": [
+    {
+     "texte": "Montrer la situation réelle",
+     "effets": {
+      "reputation_si_stab": 3
+     },
+     "suite": "La mission note les progrès réels du projet."
+    },
+    {
+     "texte": "Organiser une visite « arrangée »",
+     "effets": {
+      "budget": -8,
+      "reputation": 2,
+      "risque": 10
+     },
+     "suite": "La visite se passe bien. Les rumeurs, moins."
+    }
+   ],
+   "lecon": "Un bailleur finance des résultats mesurables : hectares équipés, rendements, comités fonctionnels."
+  },
+  {
+   "id": "panne",
+   "titre": "Panne à la station de pompage",
+   "texte": "Le groupe motopompe est à l'arrêt en pleine campagne.",
+   "si": {
+    "fait": [
+     "o_pompe"
+    ]
+   },
+   "choix": [
+    {
+     "texte": "Réparer en urgence avec des pièces d'origine",
+     "effets": {
+      "budget": -18
+     },
+     "suite": "La station redémarre en quelques jours."
+    },
+    {
+     "texte": "Bricoler une réparation",
+     "effets": {
+      "budget": -4,
+      "panne_pompe": 6
+     },
+     "suite": "La pompe tourne à moitié pendant deux mois."
+    }
+   ],
+   "lecon": "Le point de fonctionnement d'une pompe dépend de la HMT et du débit : une pompe dégradée ne fournit plus le débit d'équipement. Cours : Hydraulique générale."
+  },
+  {
+   "id": "secheresse",
+   "titre": "Rivière au plus bas",
+   "texte": "La saison sèche est sévère. L'amont prend toute l'eau, l'aval n'a plus rien.",
+   "si": {
+    "fait": [
+     "o_canaux"
+    ],
+    "non_fait": [
+     "g_aue"
+    ],
+    "saison_seche": true
+   },
+   "choix": [
+    {
+     "texte": "Imposer un tour d'eau provisoire",
+     "effets": {
+      "budget": -6,
+      "tour_eau": 9,
+      "adhesion": 1
+     },
+     "suite": "L'eau est partagée pendant trois mois."
+    },
+    {
+     "texte": "Laisser faire",
+     "effets": {
+      "incident": "conflit_eau"
+     },
+     "suite": "Les vannes de l'amont restent ouvertes. L'aval se révolte."
+    }
+   ],
+   "lecon": "Le tour d'eau répartit un débit limité entre les quartiers d'irrigation. Cours : Bases techniques et pilotage de projet d'irrigation."
+  },
+  {
+   "id": "ong",
+   "titre": "Une ONG propose son appui",
+   "texte": "Une ONG offre de cofinancer la formation des producteurs.",
+   "si": {
+    "annee_min": 1
+   },
+   "choix": [
+    {
+     "texte": "Accepter le partenariat",
+     "effets": {
+      "budget": 25,
+      "adhesion": 2
+     },
+     "suite": "Le projet reçoit 25 millions et des formateurs."
+    },
+    {
+     "texte": "Refuser",
+     "effets": {},
+     "suite": "Le projet continue seul."
+    }
+   ],
+   "lecon": ""
+  },
+  {
+   "id": "prix",
+   "titre": "Flambée du ciment et du gasoil",
+   "texte": "Les prix des matériaux montent dans toute la région.",
+   "si": {
+    "annee_min": 1
+   },
+   "choix": [
+    {
+     "texte": "Constituer un stock maintenant",
+     "effets": {
+      "budget": -20,
+      "tension": -10
+     },
+     "suite": "Tes chantiers sont protégés de la hausse."
+    },
+    {
+     "texte": "Attendre",
+     "effets": {
+      "tension": 15
+     },
+     "suite": "Les prix de tes prochains marchés augmentent."
+    }
+   ],
+   "lecon": ""
+  }
+ ]
+}

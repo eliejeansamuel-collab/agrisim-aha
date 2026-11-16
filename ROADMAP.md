@@ -57,3 +57,17 @@ Mise à jour : 15 novembre 2026, fin de la cinquième session.
 ## Pour reprendre le projet (autre modèle ou développeur)
 
 Lire dans l'ordre : PROMPT_AGRISIM_AHA.md → DECISIONS.md → ARCHITECTURE.md → FORMULES.md § 5 → ce fichier. Lancer les tests avant et après toute modification du moteur. Ne jamais mettre une valeur chiffrée dans le code : elle va dans `donnees/` avec sa source.
+
+
+## Session 6 — refonte en jeu de stratégie 2D (16 novembre 2026)
+
+Fait : APK construit par GitHub Actions ; jeu de stratégie 2D complet (carte de 11 zones, 34 initiatives, 10 événements, équipes, crues, fin de partie avec leçons liées aux cours, sauvegarde automatique) ; 29 parties automatiques et un parcours par vrais clics.
+
+Non testé : le jeu sur un vrai téléphone (tactile, lisibilité, vitesse).
+
+À faire ensuite, par ordre d'intérêt :
+1. Retours du premier essai sur téléphone (tailles de boutons, rythme).
+2. Carte réelle de la Côte d'Ivoire (régions et sous-préfectures) à la place de la carte fictive.
+3. Plus d'événements et de cultures (maraîchage de contre-saison), fertilisation.
+4. Tutoriel pas à pas pour la première partie.
+5. Vérifier avec les enseignants les valeurs indicatives (coûts, coefficient d'écoulement, Gumbel par région).

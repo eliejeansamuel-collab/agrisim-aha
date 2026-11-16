@@ -1,0 +1,63 @@
+{
+  "_note": "Formes de terrain du jeu (relief procédural calibré). Paramètres indicatifs, à remplacer par des sites réels issus d'un MNT.",
+  "bas_fond": {
+    "nom": "Bas-fond à fond plat",
+    "description": "Fond large et plat, pente faible. Site classique de riziculture. Crues du marigot.",
+    "pente_long": 0.004,
+    "pente_trans": 0.0025,
+    "demi_fond": 270,
+    "h_versant": 16,
+    "pente_canal": 0.001,
+    "crue_facteur": 1.0,
+    "crue_proba": 1.0,
+    "crue_duree": 4,
+    "drainage_naturel": 0,
+    "drain_capacite": 25,
+    "bassin": 1.0
+  },
+  "vallee_pentue": {
+    "nom": "Vallée encaissée à forte pente",
+    "description": "Versants raides, fond en pente. Planage coûteux, vitesses élevées dans les canaux, crues brèves.",
+    "pente_long": 0.015,
+    "pente_trans": 0.008,
+    "demi_fond": 255,
+    "h_versant": 42,
+    "pente_canal": 0.004,
+    "crue_facteur": 0.7,
+    "crue_proba": 0.8,
+    "crue_duree": 2,
+    "drainage_naturel": 8,
+    "drain_capacite": 25,
+    "bassin": 0.6
+  },
+  "versant": {
+    "nom": "Versant en pente (glacis)",
+    "description": "Pente transversale de 4 %. Terrasses indispensables et chères ; pas de crue, peu d'eau.",
+    "pente_long": 0.006,
+    "pente_trans": 0.04,
+    "demi_fond": 400,
+    "h_versant": 0,
+    "pente_canal": 0.002,
+    "crue_facteur": 0.0,
+    "crue_proba": 0.0,
+    "crue_duree": 0,
+    "drainage_naturel": 15,
+    "drain_capacite": 25,
+    "bassin": 0.5
+  },
+  "plaine": {
+    "nom": "Plaine alluviale très plate",
+    "description": "Presque pas de pente : gros canaux, drainage difficile, crues hautes et longues, mais beaucoup d'eau.",
+    "pente_long": 0.0005,
+    "pente_trans": 0.0005,
+    "demi_fond": 400,
+    "h_versant": 0,
+    "pente_canal": 0.0002,
+    "crue_facteur": 1.5,
+    "crue_proba": 1.0,
+    "crue_duree": 7,
+    "drainage_naturel": 0,
+    "drain_capacite": 12,
+    "bassin": 3.0
+  }
+}

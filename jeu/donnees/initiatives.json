@@ -1,0 +1,403 @@
+{
+ "_meta": {
+  "statut": "valeur indicative",
+  "note": "Coûts en millions de FCFA et durées en décades : paramètres de jeu, pas des prix de marché."
+ },
+ "initiatives": [
+  {
+   "id": "e_topo",
+   "onglet": "etudes",
+   "nom": "Levé topographique",
+   "cout": 25,
+   "duree": 4,
+   "portee": "globale",
+   "desc": "Nivellement et plans cotés des périmètres. Sans lui, les canaux sont mal calés : l'eau n'arrive pas en bout de réseau (efficience -15 %) et le planage des casiers est moins bon.",
+   "cours": "Topographie (L3) ; Cartographie (L3)",
+   "requis": []
+  },
+  {
+   "id": "e_pedo",
+   "onglet": "etudes",
+   "nom": "Étude pédologique",
+   "cout": 20,
+   "duree": 4,
+   "portee": "globale",
+   "desc": "Texture et perméabilité des sols de chaque zone. Sans elle, tu ne sais pas où la percolation est forte : les canaux en terre perdent beaucoup d'eau dans les sols sableux.",
+   "cours": "Pédogenèse (L2) ; Bases techniques de l'irrigation (L3)",
+   "requis": []
+  },
+  {
+   "id": "e_hydro",
+   "onglet": "etudes",
+   "nom": "Étude hydrologique",
+   "cout": 30,
+   "duree": 5,
+   "portee": "globale",
+   "desc": "Débits de la rivière et crue de projet par ajustement de Gumbel. Sans elle, le barrage et les digues sont dimensionnés pour une crue décennale seulement, et tu ne connais pas la ressource en saison sèche.",
+   "cours": "Hydrologie appliquée (L3) ; Probabilités et statistiques (L1)",
+   "requis": []
+  },
+  {
+   "id": "e_clim",
+   "onglet": "etudes",
+   "nom": "Étude agro-climatique",
+   "cout": 12,
+   "duree": 3,
+   "portee": "globale",
+   "desc": "ET0, pluie efficace et besoins en eau des cultures décade par décade. Sans elle, les besoins affichés sont une estimation trop basse.",
+   "cours": "Agro-climatologie (L3) ; Bilan hydrique (L3)",
+   "requis": []
+  },
+  {
+   "id": "e_eau",
+   "onglet": "etudes",
+   "nom": "Analyse de la qualité de l'eau",
+   "cout": 8,
+   "duree": 2,
+   "portee": "globale",
+   "desc": "Conductivité, SAR et RSC de l'eau d'irrigation. Sans elle, une eau chargée en sodium peut dégrader les sols sans que tu le voies venir.",
+   "cours": "Qualité des eaux d'irrigation (L3)",
+   "requis": []
+  },
+  {
+   "id": "e_foncier",
+   "onglet": "etudes",
+   "nom": "Enquête foncière",
+   "cout": 18,
+   "duree": 4,
+   "portee": "globale",
+   "desc": "Qui détient quels droits sur les terres à aménager. Sans elle, les conflits fonciers sont plus fréquents dès que les travaux arrivent.",
+   "cours": "Droit foncier rural (L2, support manquant : module simplifié)",
+   "requis": []
+  },
+  {
+   "id": "e_socio",
+   "onglet": "etudes",
+   "nom": "Étude socio-économique",
+   "cout": 15,
+   "duree": 3,
+   "portee": "globale",
+   "desc": "Attentes des villages, organisation, calendrier des travaux agricoles. Sans elle, l'adhésion des populations monte moins vite.",
+   "cours": "Communication en milieu rural (L2, support manquant)",
+   "requis": []
+  },
+  {
+   "id": "e_eie",
+   "onglet": "etudes",
+   "nom": "Étude d'impact environnemental",
+   "cout": 22,
+   "duree": 5,
+   "portee": "globale",
+   "desc": "Exigée par le bailleur avant un barrage. Construire sans elle coûte de la confiance.",
+   "cours": "Éducation environnementale (L2, support manquant) ; Stockage des eaux de surface (L3)",
+   "requis": []
+  },
+  {
+   "id": "o_prise",
+   "onglet": "ouvrages",
+   "nom": "Prise au fil de l'eau",
+   "cout": 60,
+   "duree": 6,
+   "portee": "globale",
+   "desc": "Seuil de dérivation sur la rivière. Alimente par gravité les bas-fonds et les plaines riveraines, mais seulement quand la rivière coule : un débit réservé de 30 % reste dans le lit.",
+   "cours": "Aménagement et conception de systèmes d'irrigation (L3)",
+   "requis": []
+  },
+  {
+   "id": "o_barrage",
+   "onglet": "ouvrages",
+   "nom": "Barrage et retenue",
+   "cout": 320,
+   "duree": 18,
+   "portee": "globale",
+   "desc": "Retenue de 6 millions de m³ qui stocke les pluies pour la saison sèche. Alimente par gravité bas-fonds et plaines. L'évacuateur de crues est dimensionné selon ce que tu sais de la crue de projet.",
+   "cours": "Stockage des eaux de surface (L3) ; Hydrologie appliquée (L3)",
+   "requis": []
+  },
+  {
+   "id": "o_evac",
+   "onglet": "ouvrages",
+   "nom": "Mise à niveau de l'évacuateur",
+   "cout": 70,
+   "duree": 6,
+   "portee": "globale",
+   "desc": "Redimensionne l'évacuateur de crues d'un barrage construit sans étude hydrologique (crue décennale → crue centennale).",
+   "cours": "Stockage des eaux de surface (L3)",
+   "requis": [
+    "o_barrage",
+    "e_hydro"
+   ]
+  },
+  {
+   "id": "o_forages",
+   "onglet": "ouvrages",
+   "nom": "Champ de forages",
+   "cout": 90,
+   "duree": 6,
+   "portee": "globale",
+   "desc": "Débit régulier toute l'année (60 L/s au total), utilisable dans toutes les zones, mais limité.",
+   "cours": "Mobilisation des eaux souterraines (L3)",
+   "requis": []
+  },
+  {
+   "id": "o_pompe",
+   "onglet": "ouvrages",
+   "nom": "Station de pompage (gasoil)",
+   "cout": 110,
+   "duree": 6,
+   "portee": "globale",
+   "desc": "Refoule l'eau de la rivière ou de la retenue vers les versants, les villages et les plaines éloignées. Chaque m³ pompé coûte du gasoil.",
+   "cours": "Hydraulique générale (L2) ; Bases techniques de l'irrigation (L3)",
+   "requis": []
+  },
+  {
+   "id": "o_solaire",
+   "onglet": "ouvrages",
+   "nom": "Pompage solaire",
+   "cout": 130,
+   "duree": 6,
+   "portee": "globale",
+   "desc": "Panneaux et onduleurs pour la station : le coût du m³ pompé est divisé par huit.",
+   "cours": "Électricité (L1)",
+   "requis": [
+    "o_pompe"
+   ]
+  },
+  {
+   "id": "o_canaux",
+   "onglet": "ouvrages",
+   "nom": "Canaux en terre",
+   "cout": 150,
+   "duree": 3,
+   "portee": "zones",
+   "desc": "Réseau primaire et secondaire en terre. C'est lui qui « équipe » une zone. Efficience globale faible (environ 45 %).",
+   "cours": "Aménagement et conception de systèmes d'irrigation (L3) ; Hydraulique générale (L2)",
+   "requis": []
+  },
+  {
+   "id": "o_revet",
+   "onglet": "ouvrages",
+   "nom": "Revêtement et conduites PVC",
+   "cout": 140,
+   "duree": 3,
+   "portee": "zones",
+   "desc": "Canaux revêtus et conduites enterrées : l'efficience gagne 15 points, donc moins d'eau à mobiliser.",
+   "cours": "Bases techniques de l'irrigation (L3)",
+   "requis": [
+    "o_canaux"
+   ]
+  },
+  {
+   "id": "o_casiers",
+   "onglet": "ouvrages",
+   "nom": "Planage et casiers",
+   "cout": 120,
+   "duree": 3,
+   "portee": "zones",
+   "desc": "Casiers rizicoles nivelés avec diguettes : lame d'eau uniforme, meilleur rendement.",
+   "cours": "Topographie (L3) ; Aménagement et conception (L3)",
+   "requis": [
+    "o_canaux"
+   ]
+  },
+  {
+   "id": "o_drain",
+   "onglet": "ouvrages",
+   "nom": "Réseau de drainage",
+   "cout": 90,
+   "duree": 2,
+   "portee": "zones",
+   "desc": "Évacue les excès d'eau : limite les dégâts de crue et la salinisation.",
+   "cours": "Aménagement et conception de systèmes d'irrigation (L3)",
+   "requis": [
+    "o_canaux"
+   ]
+  },
+  {
+   "id": "o_digue",
+   "onglet": "ouvrages",
+   "nom": "Digues de protection",
+   "cout": 100,
+   "duree": 3,
+   "portee": "zones",
+   "desc": "Protègent les bas-fonds et les zones riveraines contre les crues, jusqu'à la crue de projet connue.",
+   "cours": "Hydrologie appliquée (L3)",
+   "requis": [],
+   "types": [
+    "bas_fond",
+    "riveraine"
+   ]
+  },
+  {
+   "id": "o_pistes",
+   "onglet": "ouvrages",
+   "nom": "Pistes rurales",
+   "cout": 110,
+   "duree": 2,
+   "portee": "zones",
+   "desc": "Désenclavent les zones : les chantiers avancent plus vite et la récolte se vend mieux.",
+   "cours": "Bases techniques et pilotage de projet (L3)",
+   "requis": []
+  },
+  {
+   "id": "o_magasin",
+   "onglet": "ouvrages",
+   "nom": "Magasins et aires de séchage",
+   "cout": 60,
+   "duree": 2,
+   "portee": "zones",
+   "desc": "Moins de pertes après récolte, meilleur prix de vente.",
+   "cours": "Entreprises agricoles (L1, support manquant)",
+   "requis": []
+  },
+  {
+   "id": "g_info",
+   "onglet": "organisation",
+   "nom": "Information et consultation",
+   "cout": 10,
+   "duree": 1,
+   "portee": "zones",
+   "desc": "Réunions villageoises avant les travaux. Peu cher, et l'adhésion démarre.",
+   "cours": "Communication en milieu rural (L2, support manquant) ; Civisme",
+   "requis": []
+  },
+  {
+   "id": "g_foncier",
+   "onglet": "organisation",
+   "nom": "Sécurisation foncière",
+   "cout": 55,
+   "duree": 3,
+   "portee": "zones",
+   "desc": "Délimitation des terroirs et certificats fonciers. Désamorce les conflits fonciers.",
+   "cours": "Droit foncier rural (L2, support manquant : module simplifié)",
+   "requis": [
+    "e_foncier"
+   ]
+  },
+  {
+   "id": "g_coop",
+   "onglet": "organisation",
+   "nom": "Coopératives",
+   "cout": 30,
+   "duree": 2,
+   "portee": "zones",
+   "desc": "Organisation des producteurs pour les intrants et la vente.",
+   "cours": "Entreprises agricoles (L1, support manquant)",
+   "requis": []
+  },
+  {
+   "id": "g_aue",
+   "onglet": "organisation",
+   "nom": "Comités de gestion de l'eau",
+   "cout": 25,
+   "duree": 2,
+   "portee": "zones",
+   "desc": "Associations d'usagers et tour d'eau : l'eau est partagée équitablement entre l'amont et l'aval, et moins gaspillée.",
+   "cours": "Bases techniques et pilotage de projet d'irrigation (L3)",
+   "requis": [
+    "o_canaux"
+   ]
+  },
+  {
+   "id": "g_form",
+   "onglet": "organisation",
+   "nom": "Formation des irrigants",
+   "cout": 30,
+   "duree": 2,
+   "portee": "zones",
+   "desc": "Conduite de l'irrigation à la parcelle : efficience +8 points.",
+   "cours": "Bases techniques et pilotage de projet d'irrigation (L3)",
+   "requis": []
+  },
+  {
+   "id": "g_conseil",
+   "onglet": "organisation",
+   "nom": "Conseil agricole et intrants",
+   "cout": 45,
+   "duree": 2,
+   "portee": "zones",
+   "desc": "Semences améliorées, engrais, itinéraire technique : le rendement potentiel augmente.",
+   "cours": "Fertilisation-fertigation (L3) ; Amendements des sols (L3)",
+   "requis": []
+  },
+  {
+   "id": "g_redevance",
+   "onglet": "organisation",
+   "nom": "Redevance sur l'eau",
+   "cout": 5,
+   "duree": 2,
+   "portee": "globale",
+   "desc": "Les irrigants paient l'eau à chaque campagne : recettes pour le projet. Mal acceptée sans comités de gestion de l'eau.",
+   "cours": "Gestion et évaluation de projet (L2, support manquant)",
+   "requis": []
+  },
+  {
+   "id": "g_entretien",
+   "onglet": "organisation",
+   "nom": "Plan d'entretien",
+   "cout": 35,
+   "duree": 1,
+   "portee": "zones",
+   "desc": "Curage et faucardage programmés : les ouvrages se dégradent trois fois moins vite.",
+   "cours": "Bases techniques et pilotage de projet d'irrigation (L3)",
+   "requis": []
+  },
+  {
+   "id": "g_marches",
+   "onglet": "organisation",
+   "nom": "Marchés publics transparents",
+   "cout": 20,
+   "duree": 2,
+   "portee": "globale",
+   "desc": "Appels d'offres ouverts et contrôle des travaux : chaque dépense crée deux fois moins de risque de détournement.",
+   "cours": "Gestion et évaluation de projet (L2, support manquant) ; Civisme",
+   "requis": []
+  },
+  {
+   "id": "g_audit",
+   "onglet": "organisation",
+   "nom": "Audits et comité de suivi",
+   "cout": 30,
+   "duree": 3,
+   "portee": "globale",
+   "desc": "Fait reculer les détournements déjà installés.",
+   "cours": "Gestion et évaluation de projet (L2, support manquant)",
+   "requis": []
+  },
+  {
+   "id": "g_mediation",
+   "onglet": "organisation",
+   "nom": "Équipe de médiation",
+   "cout": 25,
+   "duree": 2,
+   "portee": "globale",
+   "desc": "Une équipe à envoyer dans une zone pour régler un conflit foncier ou un conflit d'eau.",
+   "cours": "Communication en milieu rural (L2, support manquant)",
+   "requis": []
+  },
+  {
+   "id": "g_brigade",
+   "onglet": "organisation",
+   "nom": "Brigade d'entretien",
+   "cout": 35,
+   "duree": 2,
+   "portee": "globale",
+   "desc": "Une équipe à envoyer dans une zone pour réparer les ouvrages dégradés ou traiter une salinisation.",
+   "cours": "Bases techniques et pilotage de projet d'irrigation (L3)",
+   "requis": []
+  },
+  {
+   "id": "g_marche",
+   "onglet": "organisation",
+   "nom": "Contrats avec les acheteurs",
+   "cout": 25,
+   "duree": 3,
+   "portee": "globale",
+   "desc": "Contrats de vente du paddy avec des rizeries : meilleur prix pour les producteurs.",
+   "cours": "Culture entrepreneuriale (L3)",
+   "requis": [
+    "g_coop"
+   ]
+  }
+ ]
+}

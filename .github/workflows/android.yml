@@ -18,6 +18,7 @@ jobs:
           cd jeu
           godot --headless --import || true
           godot --headless -s tests/run_tests.gd
+          godot --headless -s tests/partie_auto.gd
       - name: Réglages Android (clé de débogage de l'image, SDK, Java)
         run: |
           # Dans GitHub Actions, HOME n'est pas /root : on écrit nous-mêmes les réglages de l'éditeur.
