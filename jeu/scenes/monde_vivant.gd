@@ -11,6 +11,7 @@ var ouvriers_actifs := false
 var zone: Rect2 = Terrain.PARCELLE   # où les ouvriers travaillent
 var n_actifs := 10
 var mode_recolte := false
+var anim_travail := "2H_Melee_Attack_Chop"   # geste de travail : pioche au chantier, cueillette aux champs
 var point_stock := Vector3(30, 0, 140)
 
 var env: Environment
@@ -90,26 +91,28 @@ func installer(p_env: Environment, p_ciel: ProceduralSkyMaterial, p_soleil: Dire
 	# Ouvriers
 	var chemises := [Color(0.85, 0.20, 0.20), Color(0.95, 0.85, 0.20), Color(0.20, 0.45, 0.85), Color(0.95, 0.95, 0.95), Color(0.60, 0.25, 0.70)]
 	for i in 24:
-		var o := Node3D.new()
-		var corps := MeshInstance3D.new()
-		var cap := CapsuleMesh.new()
-		cap.radius = 1.1
-		cap.height = 4.6
-		corps.mesh = cap
-		corps.position.y = 2.3
-		var m := StandardMaterial3D.new()
-		m.albedo_color = chemises[i % chemises.size()]
-		corps.material_override = m
-		o.add_child(corps)
-		var chapeau := MeshInstance3D.new()
+		var o: Node3D = Modeles.personnage(i, 7.0)
+		if o == null:
+			o = Node3D.new()
+			var corps := MeshInstance3D.new()
+			var cap := CapsuleMesh.new()
+			cap.radius = 1.1
+			cap.height = 4.6
+			corps.mesh = cap
+			corps.position.y = 2.3
+			var m := StandardMaterial3D.new()
+			m.albedo_color = chemises[i % chemises.size()]
+			corps.material_override = m
+			o.add_child(corps)
+		var chapeau := MeshInstance3D.new()      # chapeau de paille
 		var cyl := CylinderMesh.new()
-		cyl.top_radius = 0.2
-		cyl.bottom_radius = 2.0
-		cyl.height = 1.0
+		cyl.top_radius = 0.3
+		cyl.bottom_radius = 2.3
+		cyl.height = 0.9
 		chapeau.mesh = cyl
-		chapeau.position.y = 5.0
+		chapeau.position.y = 7.3 if o.has_meta("anim") else 5.0
 		var mc := StandardMaterial3D.new()
-		mc.albedo_color = Color(0.85, 0.72, 0.45)
+		mc.albedo_color = Color(0.88, 0.76, 0.48)
 		chapeau.material_override = mc
 		o.add_child(chapeau)
 		var sac := MeshInstance3D.new()
@@ -119,7 +122,7 @@ func installer(p_env: Environment, p_ciel: ProceduralSkyMaterial, p_soleil: Dire
 		var msac := StandardMaterial3D.new()
 		msac.albedo_color = Color(0.88, 0.74, 0.30)
 		sac.material_override = msac
-		sac.position = Vector3(0, 6.2, 0)
+		sac.position = Vector3(0, 8.6, 0)
 		sac.visible = false
 		sac.name = "sac"
 		o.add_child(sac)
@@ -219,8 +222,10 @@ func maj(delta: float, centre: Vector3) -> void:
 				n.set_meta("pause", rng.randf_range(1.0, 4.0))
 			if p > 0.0:
 				n.set_meta("pause", p - delta)
-				# penché sur l'ouvrage ; plus lent quand il est fatigué
-				n.scale.y = 0.80 + 0.10 * sin(Time.get_ticks_msec() / (140.0 + ag.fatigue * 2.0) + n.position.x)
+				if n.has_meta("anim"):
+					Modeles.jouer(n, anim_travail)
+				else:
+					n.scale.y = 0.80 + 0.10 * sin(Time.get_ticks_msec() / (140.0 + ag.fatigue * 2.0) + n.position.x)
 				continue
 			but = n.get_meta("cible")
 		elif ag.etat == "mange":
@@ -229,9 +234,14 @@ func maj(delta: float, centre: Vector3) -> void:
 			but = point_repos + Vector3((idx % 4) * 5.0 - 8.0, 0, (idx / 4) * 5.0)
 		var plat := Vector3(but.x - n.position.x, 0, but.z - n.position.z)
 		if plat.length() < 2.0:
-			n.scale.y = 0.62 if ag.etat != "travaille" else 1.0   # assis
+			if n.has_meta("anim"):
+				Modeles.jouer(n, "Use_Item" if ag.etat == "mange" else ("Sit_Floor_Idle" if ag.etat == "repos" else "Idle"))
+			else:
+				n.scale.y = 0.62 if ag.etat != "travaille" else 1.0   # assis
 			continue
 		n.scale.y = 1.0
+		Modeles.jouer(n, "Walking_B" if ag.fatigue > 70.0 else "Walking_A")
+		n.rotation.y = lerp_angle(n.rotation.y, atan2(plat.x, plat.z), min(1.0, delta * 8.0))
 		var allure: float = 16.0 * (1.0 - ag.fatigue / 250.0)
 		var pas: Vector3 = plat.normalized() * min(allure * delta, plat.length())
 		n.position.x += pas.x

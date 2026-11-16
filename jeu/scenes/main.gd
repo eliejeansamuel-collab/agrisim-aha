@@ -292,7 +292,7 @@ func _creer_decor() -> void:
 		var loin: bool = abs(x - Terrain.x_riviere(z)) > Terrain.DEMI_FOND + 15.0
 		if Terrain.H_VERSANT <= 1.0:
 			loin = x > 260.0 or x < -60.0
-		if loin and abs(x - Terrain.x_riviere(z)) > 20.0:
+		if loin and abs(x - Terrain.x_riviere(z)) > 20.0 and Vector2(x + 310.0, z + 25.0).length() > 60.0:
 			positions.append(Vector3(x, Terrain.hauteur(x, z) + 6.0, z))
 	# Quelques palmiers et arbres isolés dans le bas-fond, hors parcelle
 	var cible_n: int = positions.size() + 40
@@ -303,27 +303,72 @@ func _creer_decor() -> void:
 		var z2 := r.randf_range(-395, 395)
 		if abs(x2 - Terrain.x_riviere(z2)) > 20.0:
 			positions.append(Vector3(x2, Terrain.hauteur(x2, z2) + 6.0, z2))
-	mm.instance_count = positions.size()
-	for i in positions.size():
-		var s := r.randf_range(0.7, 1.4)
-		mm.set_instance_transform(i, Transform3D(Basis().scaled(Vector3(s, s, s)), positions[i]))
-	var mmi := MultiMeshInstance3D.new()
-	mmi.multimesh = mm
-	mmi.material_override = _mat(Color(0.10, 0.33, 0.12))
-	decor.add_child(mmi)
+	var modeles_arbres: Array = [Modeles.maillage("tree_single_A", 16.0), Modeles.maillage("tree_single_B", 13.0)]
+	if modeles_arbres[0].is_empty() or modeles_arbres[1].is_empty():
+		mm.instance_count = positions.size()
+		for i in positions.size():
+			var s := r.randf_range(0.7, 1.4)
+			mm.set_instance_transform(i, Transform3D(Basis().scaled(Vector3(s, s, s)), positions[i]))
+		var mmi := MultiMeshInstance3D.new()
+		mmi.multimesh = mm
+		mmi.material_override = _mat(Color(0.10, 0.33, 0.12))
+		decor.add_child(mmi)
+	else:
+		for v in 2:
+			var ma: Dictionary = modeles_arbres[v]
+			var liste: Array = []
+			for i in positions.size():
+				if i % 2 == v:
+					liste.append(positions[i])
+			var mm2 := MultiMesh.new()
+			mm2.transform_format = MultiMesh.TRANSFORM_3D
+			mm2.mesh = ma.mesh
+			mm2.instance_count = liste.size()
+			for i in liste.size():
+				var s2: float = ma.echelle * r.randf_range(0.75, 1.35)
+				var pos: Vector3 = liste[i] - Vector3(0, 6.0, 0)
+				pos.y -= ma.base * s2
+				mm2.set_instance_transform(i, Transform3D(Basis(Vector3.UP, r.randf() * TAU).scaled(Vector3(s2, s2, s2)), pos))
+			var mmi2 := MultiMeshInstance3D.new()
+			mmi2.multimesh = mm2
+			decor.add_child(mmi2)
+	# Rochers épars
+	for i in 14:
+		var xr := r.randf_range(-390, 390)
+		var zr := r.randf_range(-390, 390)
+		if Terrain.PARCELLE.grow(30).has_point(Vector2(xr, zr)) or abs(xr - Terrain.x_riviere(zr)) < 15.0:
+			continue
+		var roc := Modeles.decor("rock_single_A", r.randf_range(2.5, 5.0))
+		if roc != null:
+			roc.position = Vector3(xr, Terrain.hauteur(xr, zr) - 0.3, zr)
+			roc.rotation.y = r.randf() * TAU
+			decor.add_child(roc)
 	# Village sur le versant ouest
+	var types := ["building_home_A_yellow", "building_home_B_yellow", "building_home_A_yellow", "building_home_B_yellow", "building_home_B_yellow", "building_home_A_yellow", "building_home_A_yellow"]
 	for i in 7:
-		var x := -330.0 + (i % 3) * 22.0
-		var z := -60.0 + (i / 3) * 28.0 + (i % 2) * 6.0
+		var x := -335.0 + (i % 3) * 26.0
+		var z := -65.0 + (i / 3) * 30.0 + (i % 2) * 6.0
 		var y := Terrain.hauteur(x, z)
-		_boite(decor, Vector3(9, 5, 7), Vector3(x, y + 2.5, z), Color(0.80, 0.62, 0.42))
-		var toit := MeshInstance3D.new()
-		var pr := PrismMesh.new()
-		pr.size = Vector3(11, 3.5, 9)
-		toit.mesh = pr
-		toit.material_override = _mat(Color(0.55, 0.25, 0.15))
-		toit.position = Vector3(x, y + 6.7, z)
-		decor.add_child(toit)
+		var maison := Modeles.decor(types[i], 13.0 if i != 6 else 9.0)
+		if maison != null:
+			maison.position = Vector3(x, y - 0.4, z)
+			maison.rotation.y = r.randf_range(-0.5, 0.5) + PI / 2.0
+			decor.add_child(maison)
+		else:
+			_boite(decor, Vector3(9, 5, 7), Vector3(x, y + 2.5, z), Color(0.80, 0.62, 0.42))
+	var puits := Modeles.decor("building_well_yellow", 6.0)
+	if puits != null:
+		puits.position = Vector3(-300, Terrain.hauteur(-300, -20) - 0.3, -20)
+		decor.add_child(puits)
+	# Campement de chantier : tente (repos), tonneaux et caisses (repas), palettes et sacs (aire de battage)
+	for objet in [["tent", 9.0, monde.point_repos + Vector3(0, 0, -8)], ["barrel", 3.0, monde.point_repas + Vector3(-12, 0, 0)],
+			["crate_A_big", 3.0, monde.point_repas + Vector3(-12, 0, 5)], ["bucket_water", 2.0, monde.point_repas + Vector3(-9, 0, 2)],
+			["pallet", 1.0, monde.point_stock], ["sack", 2.6, monde.point_stock + Vector3(2, 0.9, 0)], ["sack", 2.6, monde.point_stock + Vector3(-2, 0.9, 1)]]:
+		var o := Modeles.decor(objet[0], objet[1])
+		if o != null:
+			var pp: Vector3 = objet[2]
+			o.position = Vector3(pp.x, Terrain.hauteur(pp.x, pp.z) + pp.y * 0.0 + (0.9 if objet[0] == "sack" else 0.0), pp.z)
+			decor.add_child(o)
 	# Contour de la parcelle candidate (piquets jaunes)
 	var pr2 := Terrain.PARCELLE
 	for coin in [pr2.position, Vector2(pr2.end.x, pr2.position.y), pr2.end, Vector2(pr2.position.x, pr2.end.y)]:
@@ -331,23 +376,30 @@ func _creer_decor() -> void:
 
 
 func _creer_avatar() -> void:
-	avatar = Node3D.new()
-	var corps := MeshInstance3D.new()
-	var cap := CapsuleMesh.new()
-	cap.radius = 1.6
-	cap.height = 7.0
-	corps.mesh = cap
-	corps.material_override = _mat(Color(0.95, 0.45, 0.10))
-	corps.position.y = 3.5
-	avatar.add_child(corps)
-	var tete := MeshInstance3D.new()
-	var sph := SphereMesh.new()
-	sph.radius = 1.5
-	sph.height = 3.0
-	tete.mesh = sph
-	tete.material_override = _mat(Color(0.35, 0.22, 0.14))
-	tete.position.y = 8.2
-	avatar.add_child(tete)
+	avatar = Modeles.personnage(0, 8.0)
+	if avatar == null:
+		avatar = Node3D.new()
+		var corps := MeshInstance3D.new()
+		var cap := CapsuleMesh.new()
+		cap.radius = 1.6
+		cap.height = 7.0
+		corps.mesh = cap
+		corps.material_override = _mat(Color(0.95, 0.45, 0.10))
+		corps.position.y = 3.5
+		avatar.add_child(corps)
+	# Repère au-dessus de la tête pour retrouver son personnage
+	var repere := MeshInstance3D.new()
+	var cone := CylinderMesh.new()
+	cone.top_radius = 1.4
+	cone.bottom_radius = 0.0
+	cone.height = 2.4
+	repere.mesh = cone
+	var mr := StandardMaterial3D.new()
+	mr.albedo_color = Color(1.0, 0.55, 0.05)
+	mr.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	repere.material_override = mr
+	repere.position.y = 11.0
+	avatar.add_child(repere)
 	add_child(avatar)
 	avatar.position = Vector3(60, Terrain.hauteur(60, -150), -150)
 
@@ -450,12 +502,7 @@ func _construire_amenagement() -> void:
 	eau_mat = _mat(Color(0.25, 0.50, 0.70, 0.75), true)
 	eau_mm.material_override = eau_mat
 	amenagement.add_child(eau_mm)
-	var touffe := CylinderMesh.new()      # touffe de riz : gerbe évasée
-	touffe.top_radius = 1.0
-	touffe.bottom_radius = 0.25
-	touffe.height = 1.0
-	touffe.radial_segments = 5
-	touffe.rings = 1
+	var touffe := _mesh_touffe()
 	var mr := MultiMesh.new()
 	mr.transform_format = MultiMesh.TRANSFORM_3D
 	mr.mesh = touffe
@@ -467,6 +514,24 @@ func _construire_amenagement() -> void:
 	riz_mm.material_override = riz_mat
 	amenagement.add_child(riz_mm)
 	_maj_parcelle(0.0, 0.0, 0.0)
+
+
+## Touffe de riz : 6 feuilles effilées qui s'écartent (hauteur 1, de y = -0,5 à +0,5)
+func _mesh_touffe() -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for k in 6:
+		var a: float = TAU * k / 6.0 + 0.3
+		var dehors := Vector3(cos(a), 0, sin(a))
+		var cote := Vector3(-sin(a), 0, cos(a))
+		var p0 := dehors * 0.08 - Vector3(0, 0.5, 0)
+		var p1 := dehors * 0.45 + Vector3(0, 0.05, 0)
+		var p2 := dehors * (0.95 if k % 2 == 0 else 0.6) + Vector3(0, 0.5 if k % 2 == 0 else 0.35, 0)
+		for tri in [[p0 - cote * 0.07, p0 + cote * 0.07, p1 + cote * 0.13], [p0 - cote * 0.07, p1 + cote * 0.13, p1 - cote * 0.13], [p1 - cote * 0.13, p1 + cote * 0.13, p2]]:
+			for v in tri:
+				st.set_normal(Vector3.UP)
+				st.add_vertex(v)
+	return st.commit()
 
 
 func _troncon_canal(parent: Node3D, a: Vector3, b: Vector3) -> void:
@@ -649,7 +714,11 @@ func _toucher_terrain(pos_ecran: Vector2) -> void:
 			_fiche_ouvrier(ia)
 			return
 	var tw := create_tween()
-	tw.tween_property(avatar, "position", cible, clamp(avatar.position.distance_to(cible) / 120.0, 0.3, 2.5))
+	var duree: float = clamp(avatar.position.distance_to(cible) / 45.0, 0.4, 8.0)
+	avatar.rotation.y = atan2(cible.x - avatar.position.x, cible.z - avatar.position.z)
+	Modeles.jouer(avatar, "Walking_A")
+	tw.tween_property(avatar, "position", cible, duree)
+	tw.tween_callback(func(): Modeles.jouer(avatar, "Idle"))
 	tw.parallel().tween_property(self, "cam_cible", cible, 0.8)
 	var dans: bool = Terrain.PARCELLE.has_point(Vector2(cible.x, cible.z))
 	var lieu := "dans la parcelle" if dans else "hors parcelle"
@@ -1449,6 +1518,7 @@ func _demarrer_travaux() -> void:
 	monde.repas_fournis = repas
 	var premier = _lot_courant("manœuvre")
 	monde.zone = premier.zone if premier != null else lots[0].zone
+	monde.anim_travail = "2H_Melee_Attack_Chop"
 	monde.creer_equipe(roles)
 	Terrain.casiers_niveles = false
 	_construire_amenagement()
@@ -1635,6 +1705,7 @@ func _demarrer_campagne() -> void:
 	for k in int(equipe.riziculteurs): roles.append("riziculteur")
 	monde.zone = Terrain.PARCELLE
 	monde.repas_fournis = repas
+	monde.anim_travail = "PickUp"
 	monde.creer_equipe(roles)
 	salaires_campagne = 0.0
 	carburant_fcfa = 0.0
@@ -2063,6 +2134,33 @@ func _pilote_auto(mode: String) -> void:
 		if campagne.jour >= 70 and not pris:
 			pris = true
 			await _capture(mode + "_4_campagne")
+			# Gros plans pour contrôler les modèles 3D
+			var v_avant := vitesse
+			vitesse = 0.02
+			monde.heure_agents = 9.0
+			for ag in monde.agents:
+				ag.etat = "travaille"
+				ag.fatigue = 20.0
+				ag.faim = 20.0
+			await get_tree().create_timer(3.0).timeout
+			var d_avant := cam_dist
+			var c_avant := cam_cible
+			var p_avant := cam_pitch
+			cam_cible = (monde.ouvriers[0] as Node3D).position + Vector3(0, 3, 0)
+			cam_dist = 42.0
+			cam_pitch = 0.35
+			await get_tree().create_timer(1.0).timeout
+			await _capture(mode + "_4c_zoom_ouvriers")
+			cam_cible = Vector3(-315, Terrain.hauteur(-315, -30) + 4.0, -30)
+			cam_dist = 90.0
+			await get_tree().create_timer(0.5).timeout
+			await _capture(mode + "_4d_zoom_village")
+			cam_cible = monde.point_repos + Vector3(0, 3, 0)
+			cam_dist = 55.0
+			await get_tree().create_timer(0.5).timeout
+			await _capture(mode + "_4e_zoom_campement")
+			cam_dist = d_avant; cam_cible = c_avant; cam_pitch = p_avant
+			vitesse = v_avant
 			_fiche_ouvrier(1)
 			await get_tree().create_timer(0.2).timeout
 			await _capture(mode + "_4b_ouvrier")

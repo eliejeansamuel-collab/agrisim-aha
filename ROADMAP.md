@@ -1,6 +1,6 @@
 # Feuille de route
 
-Mise à jour : 15 novembre 2026, fin de la quatrième session.
+Mise à jour : 15 novembre 2026, fin de la cinquième session.
 
 ## Fait et vérifié
 
@@ -31,6 +31,8 @@ Mise à jour : 15 novembre 2026, fin de la quatrième session.
 - Pluie efficace nulle pour le dimensionnement ; mise en eau non comptée ; irrigation en pilote automatique.
 - Travaux : coût et délai forfaitaires. Vente à prix fixe. Pas de fertilisation, ravageurs, main-d'œuvre, stocks.
 - Sauvegarde : seul le résumé de la dernière partie est écrit ; pas de reprise en cours de partie.
+
+- **Modèles 3D libres (session 5)** : personnages animés (marche, travail, assis, repas) pour les ouvriers et le joueur, arbres, rochers, maisons du village, puits, tente, tonneaux, caisses, sacs ; touffes de riz en feuilles. Le chargeur (`scenes/modeles.gd`) retombe sur les formes simples si un modèle manque. Limite : personnages et maisons de style médiéval-fantaisie européen, faute de pack libre représentant des agriculteurs et un village ivoiriens ; pas d'engins, de palmiers ni de cacaoyers.
 
 ## Limites de la session 4
 

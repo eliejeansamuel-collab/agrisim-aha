@@ -1,4 +1,5 @@
 shader_type spatial;
+render_mode cull_disabled;
 // Touffes de riz qui ondulent sous le vent (onde cohérente à travers la parcelle)
 uniform vec3 couleur : source_color = vec3(0.30, 0.72, 0.22);
 uniform float vent = 1.0;
@@ -11,6 +12,6 @@ void vertex() {
 	VERTEX.z += haut * cos(TIME * 1.7 + phase * 1.3) * 0.25 * vent;
 }
 void fragment() {
-	ALBEDO = couleur;
+	ALBEDO = couleur * (0.75 + 0.25 * COLOR.r);
 	ROUGHNESS = 0.9;
 }
